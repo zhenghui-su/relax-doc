@@ -7,7 +7,7 @@ import { HeaderSlotRegistration } from "@/components/layout/header-slot";
 import { type DocumentListItem } from "@/types/document";
 import { cn, roleLabel } from "@/lib/utils";
 
-type DocumentsView = "all" | "favorites" | "shared" | "archived";
+type DocumentsView = "all" | "favorites" | "shared" | "archived" | "trash";
 
 const VIEW_LABELS: Record<DocumentsView, { title: string; description: string }> = {
   all: {
@@ -25,6 +25,10 @@ const VIEW_LABELS: Record<DocumentsView, { title: string; description: string }>
   archived: {
     title: "已归档",
     description: "已从主导航隐藏的页面。",
+  },
+  trash: {
+    title: "回收站",
+    description: "已删除页面会先进入回收站，可在这里恢复或彻底删除。",
   },
 };
 
@@ -95,8 +99,22 @@ function ArchiveIcon() {
   );
 }
 
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5">
+      <path
+        d="M5.75 6.25h8.5m-7.5 0 .55 8.1c.03.52.47.92 1 .92h3.4c.53 0 .97-.4 1-.92l.55-8.1M8 6.25V5a.75.75 0 0 1 .75-.75h2.5A.75.75 0 0 1 12 5v1.25"
+        stroke="currentColor"
+        strokeWidth="1.45"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function getView(value?: string): DocumentsView {
-  if (value === "favorites" || value === "shared" || value === "archived") {
+  if (value === "favorites" || value === "shared" || value === "archived" || value === "trash") {
     return value;
   }
 
@@ -137,19 +155,23 @@ function getViewDocuments(
   documents: DocumentListItem[],
   view: DocumentsView,
 ) {
+  if (view === "trash") {
+    return documents.filter((document) => Boolean(document.deletedAt));
+  }
+
   if (view === "favorites") {
-    return documents.filter((document) => !document.isArchived && document.isFavorite);
+    return documents.filter((document) => !document.deletedAt && !document.isArchived && document.isFavorite);
   }
 
   if (view === "shared") {
-    return documents.filter((document) => !document.isArchived && document.role !== "owner");
+    return documents.filter((document) => !document.deletedAt && !document.isArchived && document.role !== "owner");
   }
 
   if (view === "archived") {
-    return documents.filter((document) => document.isArchived);
+    return documents.filter((document) => !document.deletedAt && document.isArchived);
   }
 
-  return documents.filter((document) => !document.isArchived);
+  return documents.filter((document) => !document.deletedAt && !document.isArchived);
 }
 
 function EmptyState({
@@ -190,10 +212,11 @@ export default async function DocumentsPage({
   }, new Map<string, number>());
 
   const counts = {
-    all: documents.filter((document) => !document.isArchived).length,
-    favorites: documents.filter((document) => !document.isArchived && document.isFavorite).length,
-    shared: documents.filter((document) => !document.isArchived && document.role !== "owner").length,
-    archived: documents.filter((document) => document.isArchived).length,
+    all: documents.filter((document) => !document.deletedAt && !document.isArchived).length,
+    favorites: documents.filter((document) => !document.deletedAt && !document.isArchived && document.isFavorite).length,
+    shared: documents.filter((document) => !document.deletedAt && !document.isArchived && document.role !== "owner").length,
+    archived: documents.filter((document) => !document.deletedAt && document.isArchived).length,
+    trash: documents.filter((document) => Boolean(document.deletedAt)).length,
   } satisfies Record<DocumentsView, number>;
 
   const viewDocuments = getViewDocuments(documents, currentView);
@@ -269,6 +292,7 @@ export default async function DocumentsPage({
             ["favorites", "收藏"],
             ["shared", "共享给我"],
             ["archived", "已归档"],
+            ["trash", "回收站"],
           ] as Array<[DocumentsView, string]>).map(([view, label]) => {
             const href = view === "all" ? "/docs" : `/docs?view=${view}`;
             const active = currentView === view;
@@ -295,7 +319,13 @@ export default async function DocumentsPage({
 
         <div className="flex items-center justify-between gap-3 text-xs text-muted">
           <p>{filteredDocuments.length} 个页面</p>
-          <p>{counts.archived > 0 ? `已归档 ${counts.archived} 个页面` : "所有改动会自动保存"}</p>
+          <p>
+            {currentView === "trash"
+              ? "拖拽层级不会作用于回收站中的页面"
+              : counts.archived > 0
+                ? `已归档 ${counts.archived} 个页面`
+                : "所有改动会自动保存"}
+          </p>
         </div>
 
         {documents.length === 0 ? (
@@ -323,59 +353,91 @@ export default async function DocumentsPage({
                   key={document.id}
                   className="group flex items-center gap-3 rounded-2xl px-3 py-3 transition hover:bg-white/82"
                 >
-                  <Link
-                    href={`/docs/${document.id}`}
-                    className="flex min-w-0 flex-1 items-center gap-3"
-                  >
-                    <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-2xl bg-white/84 text-muted shadow-[0_8px_18px_rgba(15,23,42,0.05)]">
-                      <FileIcon />
-                    </span>
+                  {document.deletedAt ? (
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-2xl bg-white/84 text-muted shadow-[0_8px_18px_rgba(15,23,42,0.05)]">
+                        <FileIcon />
+                      </span>
 
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2">
-                        <span className="truncate text-sm font-medium text-foreground sm:text-[15px]">
-                          {document.title}
-                        </span>
-                        {document.isFavorite ? (
-                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-100 text-amber-700">
-                            <StarIcon filled />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className="truncate text-sm font-medium text-foreground sm:text-[15px]">
+                            {document.title}
                           </span>
-                        ) : null}
-                        {document.isArchived ? (
                           <span className="inline-flex h-6 items-center gap-1 rounded-full bg-black/[0.055] px-2 text-[11px] font-medium text-foreground">
-                            <ArchiveIcon />
-                            已归档
+                            <TrashIcon />
+                            回收站
                           </span>
-                        ) : null}
+                        </span>
+
+                        <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+                          {parentPath ? <span className="truncate">{parentPath}</span> : null}
+                          {document.role !== "owner" ? (
+                            <span className="inline-flex h-6 items-center rounded-full bg-black/[0.045] px-2.5 text-[11px] font-medium text-foreground">
+                              {roleLabel(document.role)}
+                            </span>
+                          ) : null}
+                          <span>已删除，可恢复</span>
+                        </span>
+                      </span>
+                    </div>
+                  ) : (
+                    <Link
+                      href={`/docs/${document.id}`}
+                      className="flex min-w-0 flex-1 items-center gap-3"
+                    >
+                      <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-2xl bg-white/84 text-muted shadow-[0_8px_18px_rgba(15,23,42,0.05)]">
+                        <FileIcon />
                       </span>
 
-                      <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
-                        {parentPath ? <span className="truncate">{parentPath}</span> : null}
-                        {document.role !== "owner" ? (
-                          <span className="inline-flex h-6 items-center rounded-full bg-black/[0.045] px-2.5 text-[11px] font-medium text-foreground">
-                            {roleLabel(document.role)}
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className="truncate text-sm font-medium text-foreground sm:text-[15px]">
+                            {document.title}
                           </span>
-                        ) : null}
-                        {childCount > 0 ? (
-                          <span>{childCount} 个子页面</span>
-                        ) : null}
+                          {document.isFavorite ? (
+                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                              <StarIcon filled />
+                            </span>
+                          ) : null}
+                          {document.isArchived ? (
+                            <span className="inline-flex h-6 items-center gap-1 rounded-full bg-black/[0.055] px-2 text-[11px] font-medium text-foreground">
+                              <ArchiveIcon />
+                              已归档
+                            </span>
+                          ) : null}
+                        </span>
+
+                        <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+                          {parentPath ? <span className="truncate">{parentPath}</span> : null}
+                          {document.role !== "owner" ? (
+                            <span className="inline-flex h-6 items-center rounded-full bg-black/[0.045] px-2.5 text-[11px] font-medium text-foreground">
+                              {roleLabel(document.role)}
+                            </span>
+                          ) : null}
+                          {childCount > 0 ? (
+                            <span>{childCount} 个子页面</span>
+                          ) : null}
+                        </span>
                       </span>
-                    </span>
-                  </Link>
+                    </Link>
+                  )}
 
                   <div className="hidden shrink-0 text-right lg:block">
                     <p className="text-xs font-medium text-foreground/84">
-                      {formatDate(document.updatedAt)}
+                      {formatDate(document.deletedAt ?? document.updatedAt)}
                     </p>
                     <p className="mt-1 text-[11px] text-muted">
-                      {document.parentId ? "子页面" : "独立页面"}
+                      {document.deletedAt ? "已删除" : document.parentId ? "子页面" : "独立页面"}
                     </p>
                   </div>
 
                   <DocumentRowActions
                     documentId={document.id}
                     canEdit={document.role === "owner" || document.role === "editor"}
+                    canDelete={document.role === "owner"}
                     isArchived={document.isArchived}
+                    isDeleted={Boolean(document.deletedAt)}
                     isFavorite={document.isFavorite}
                   />
                 </div>

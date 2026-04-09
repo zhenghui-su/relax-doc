@@ -140,6 +140,7 @@ export async function listDocumentsForUser(userId: string) {
     updatedAt: document.updatedAt,
     createdAt: document.createdAt,
     isArchived: document.isArchived,
+    deletedAt: document.deletedAt,
     isFavorite: document.favorites.length > 0,
     role:
       document.ownerId === userId

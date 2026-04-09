@@ -91,6 +91,7 @@ model Document {
   parentId       String?
   lastEditedById String?
   isArchived     Boolean             @default(false)
+  deletedAt      DateTime?
   owner          User                @relation("OwnedDocuments", fields: [ownerId], references: [id], onDelete: Cascade)
   parent         Document?           @relation("DocumentTree", fields: [parentId], references: [id], onDelete: SetNull)
   children       Document[]          @relation("DocumentTree")
@@ -105,6 +106,7 @@ model Document {
   @@index([parentId])
   @@index([lastEditedById])
   @@index([isArchived])
+  @@index([deletedAt])
 }
 
 model DocumentFavorite {

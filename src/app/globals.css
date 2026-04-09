@@ -163,6 +163,31 @@ button,
   display: none;
 }
 
+.sidebar-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(55, 53, 47, 0.18) transparent;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar {
+  width: 10px;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background: rgba(55, 53, 47, 0.18);
+  background-clip: padding-box;
+}
+
+.sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(55, 53, 47, 0.28);
+  background-clip: padding-box;
+}
+
 .ProseMirror {
   min-height: 64vh;
   color: var(--foreground);

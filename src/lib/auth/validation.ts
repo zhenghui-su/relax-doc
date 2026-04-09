@@ -39,6 +39,11 @@ export const documentStateSchema = z.object({
   documentId: z.string().cuid(),
 });
 
+export const moveDocumentSchema = z.object({
+  documentId: z.string().cuid(),
+  parentId: z.string().cuid().nullable(),
+});
+
 export const inviteMemberSchema = z.object({
   documentId: z.string().cuid(),
   email: z.email().trim().toLowerCase(),

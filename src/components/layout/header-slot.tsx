@@ -86,7 +86,7 @@ function DesktopSidebar({
   return (
     <aside
       className={cn(
-        "surface-sidebar hidden shrink-0 flex-col overflow-visible transition-[width,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:flex",
+        "surface-sidebar hidden h-screen shrink-0 flex-col overflow-hidden transition-[width,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] lg:flex",
         collapsed ? "w-[84px]" : "w-[280px]",
       )}
     >
@@ -156,14 +156,14 @@ export function HeaderSlotProvider({
 
   return (
     <HeaderSlotContext.Provider value={setContent}>
-      <div className="flex min-w-0 flex-1">
+      <div className="flex h-screen max-h-screen min-w-0 flex-1 overflow-hidden">
         <DesktopSidebar
           collapsed={collapsed}
           documents={documents}
           onToggle={() => setCollapsed((current) => !current)}
         />
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <header className="sticky top-0 z-30 border-b border-border bg-background/92 backdrop-blur-xl">
             <div className="flex min-h-14 items-center gap-3 px-4 py-2 sm:px-6 lg:px-8">
               <button
@@ -180,7 +180,7 @@ export function HeaderSlotProvider({
             </div>
           </header>
 
-          <main className="flex-1 px-0 py-0">
+          <main className="min-h-0 flex-1 overflow-y-auto px-0 py-0">
             {children}
           </main>
         </div>

@@ -5,6 +5,7 @@ export type DocumentListItem = {
   updatedAt: Date;
   createdAt: Date;
   isArchived: boolean;
+  deletedAt: Date | null;
   isFavorite: boolean;
   role: "owner" | "editor" | "viewer";
 };

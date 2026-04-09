@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth/session";
 import { getDocumentAccess, getDocumentSharingState } from "@/lib/documents";
 import { CollaborativeEditor } from "@/components/editor/collaborative-editor";
 import { DocumentHeaderActions } from "@/components/docs/document-header-actions";
+import { DocumentMetaMenu } from "@/components/docs/document-meta-menu";
 import { TitleForm } from "@/components/docs/title-form";
 import { HeaderSlotRegistration } from "@/components/layout/header-slot";
 import { nameFromEmail } from "@/lib/utils";
@@ -12,6 +13,43 @@ function formatDate(value: Date) {
   return new Intl.DateTimeFormat("zh-CN", {
     dateStyle: "medium",
     timeStyle: "short",
+  }).format(value);
+}
+
+function formatRelativeDocumentTime(value: Date) {
+  const now = new Date();
+  const diff = now.getTime() - value.getTime();
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diff < minute) {
+    return "刚刚";
+  }
+
+  if (diff < hour) {
+    return `${Math.max(1, Math.floor(diff / minute))} 分钟前`;
+  }
+
+  if (diff < day) {
+    return `${Math.max(1, Math.floor(diff / hour))} 小时前`;
+  }
+
+  if (diff < 30 * day) {
+    return `${Math.max(1, Math.floor(diff / day))} 天前`;
+  }
+
+  if (now.getFullYear() === value.getFullYear()) {
+    return new Intl.DateTimeFormat("zh-CN", {
+      month: "numeric",
+      day: "numeric",
+    }).format(value);
+  }
+
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
   }).format(value);
 }
 
@@ -25,7 +63,7 @@ function getLastEditedLabel(document: {
   const userLabel = document.lastEditedBy?.name?.trim()
     || (document.lastEditedBy?.email ? nameFromEmail(document.lastEditedBy.email) : "未知用户");
 
-  return `${userLabel} · ${formatDate(document.updatedAt)}`;
+  return `${userLabel} · ${formatRelativeDocumentTime(document.updatedAt)}`;
 }
 
 function FileIcon() {
@@ -46,10 +84,6 @@ function FileIcon() {
       />
     </svg>
   );
-}
-
-function DotDivider() {
-  return <span className="text-black/18">·</span>;
 }
 
 export default async function DocumentPage({
@@ -79,13 +113,33 @@ export default async function DocumentPage({
     notFound();
   }
 
-  const sharingState = access.canShare
-    ? await getDocumentSharingState(access.document.id)
-    : null;
-
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const ownershipLabel = access.role === "owner" ? "所有者" : "协作者";
   const lastEditedLabel = getLastEditedLabel(access.document);
+  const isDeleted = Boolean(access.document.deletedAt);
+  const pageCanEdit = access.canEdit && !isDeleted;
+  const pageCanShare = access.canShare && !isDeleted;
+  const sharingState = pageCanShare
+    ? await getDocumentSharingState(access.document.id)
+    : null;
+  const metaItems = [
+    {
+      label: "角色",
+      value: ownershipLabel,
+    },
+    {
+      label: "权限",
+      value: pageCanEdit ? "可编辑" : "只读",
+    },
+    {
+      label: "创建时间",
+      value: formatDate(access.document.createdAt),
+    },
+    {
+      label: "最后编辑",
+      value: `${lastEditedLabel} (${formatDate(access.document.updatedAt)})`,
+    },
+  ];
 
   return (
     <div className="flex w-full flex-col gap-0">
@@ -96,23 +150,19 @@ export default async function DocumentPage({
               <FileIcon />
             </span>
 
-            <div className="min-w-0 flex-1">
-              <div className="min-w-0">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <div className="min-w-0 flex-1">
                 <TitleForm
                   documentId={access.document.id}
                   initialTitle={access.document.title}
-                  canEdit={access.canEdit}
+                  canEdit={pageCanEdit}
                   compact
                 />
               </div>
-              <div className="hidden min-w-0 items-center gap-2 overflow-hidden text-xs text-muted lg:flex">
-                <span className="font-medium text-foreground/84">{ownershipLabel}</span>
-                <DotDivider />
-                <span>{access.canEdit ? "可编辑" : "只读"}</span>
-                <DotDivider />
-                <span>创建于 {formatDate(access.document.createdAt)}</span>
-                <DotDivider />
-                <span className="truncate">最后编辑 {lastEditedLabel}</span>
+
+              <div className="hidden shrink-0 items-center gap-2 text-xs text-muted lg:flex">
+                <span className="whitespace-nowrap">最后编辑 {lastEditedLabel}</span>
+                <DocumentMetaMenu items={metaItems} />
               </div>
             </div>
           </div>
@@ -121,10 +171,12 @@ export default async function DocumentPage({
             <DocumentHeaderActions
               documentId={access.document.id}
               appUrl={appUrl}
-              canEdit={access.canEdit}
-              canShare={access.canShare}
+              canEdit={pageCanEdit}
+              canShare={pageCanShare}
               isArchived={access.document.isArchived}
+              isDeleted={isDeleted}
               isFavorite={access.document.favorites.length > 0}
+              role={access.role}
               shareLinks={sharingState?.shareLinks ?? []}
             />
           </div>
@@ -132,27 +184,28 @@ export default async function DocumentPage({
       </HeaderSlotRegistration>
 
       <div className="px-4 py-3 sm:px-6 lg:px-8 lg:hidden">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-          <span className="inline-flex h-8 items-center rounded-full bg-black/[0.045] px-3 font-medium text-foreground">
-            {ownershipLabel}
-          </span>
-          <span className="inline-flex h-8 items-center rounded-full bg-black/[0.045] px-3 font-medium text-foreground">
-            {access.canEdit ? "可编辑" : "只读"}
-          </span>
-          <span className="inline-flex h-8 items-center rounded-full bg-black/[0.045] px-3 font-medium text-foreground">
-            创建于 {formatDate(access.document.createdAt)}
-          </span>
-          <span className="inline-flex h-8 max-w-full items-center truncate rounded-full bg-black/[0.045] px-3 font-medium text-foreground">
-            最后编辑 {lastEditedLabel}
-          </span>
+        <div className="flex items-center justify-between gap-3 text-xs text-muted">
+          <span className="truncate">最后编辑 {lastEditedLabel}</span>
+          <DocumentMetaMenu items={metaItems} />
         </div>
       </div>
 
-      <CollaborativeEditor
-        documentId={access.document.id}
-        shareToken={share}
-        canEdit={access.canEdit}
-      />
+      {isDeleted ? (
+        <div className="px-4 py-10 sm:px-6 lg:px-8">
+          <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 text-center">
+            <p className="text-lg font-semibold text-foreground">该文档已在回收站中</p>
+            <p className="max-w-md text-sm text-muted">
+              回收站中的文档会从主导航中隐藏。恢复后即可继续编辑和分享。
+            </p>
+          </div>
+        </div>
+      ) : (
+        <CollaborativeEditor
+          documentId={access.document.id}
+          shareToken={share}
+          canEdit={pageCanEdit}
+        />
+      )}
     </div>
   );
 }

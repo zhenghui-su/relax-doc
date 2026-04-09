@@ -44,6 +44,13 @@ export async function inviteDocumentMemberAction(
     };
   }
 
+  if (access.document.deletedAt) {
+    return {
+      ok: false,
+      message: "回收站中的文档不能管理成员。",
+    };
+  }
+
   const invitee = await prisma.user.findUnique({
     where: { email: validated.data.email },
   });
@@ -117,6 +124,13 @@ export async function createShareLinkAction(
     };
   }
 
+  if (access.document.deletedAt) {
+    return {
+      ok: false,
+      message: "回收站中的文档不能创建分享链接。",
+    };
+  }
+
   await prisma.documentShareLink.updateMany({
     where: {
       documentId: validated.data.documentId,
@@ -182,6 +196,10 @@ export async function disableShareLinkAction(formData: FormData) {
     return;
   }
 
+  if (access.document.deletedAt) {
+    return;
+  }
+
   await prisma.documentShareLink.update({
     where: { id: validated.data.linkId },
     data: {
@@ -219,6 +237,13 @@ export async function disableShareLinkStateAction(
     return {
       ok: false,
       message: "只有文档所有者可以管理分享链接。",
+    };
+  }
+
+  if (access.document.deletedAt) {
+    return {
+      ok: false,
+      message: "回收站中的文档不能管理分享链接。",
     };
   }
 

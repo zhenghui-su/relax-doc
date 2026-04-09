@@ -405,7 +405,7 @@ function EditorSurface({
 
   return (
     <div className="editor-frame flex min-h-[calc(100vh-8.5rem)] flex-col overflow-visible rounded-none shadow-none">
-      <div className="editor-toolbar sticky top-14 z-20 flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
+      <div className="editor-toolbar sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
         <div className="hide-scrollbar flex max-w-full items-center gap-1.5 overflow-x-auto pb-1">
           {toolbarButtons.map((item) => {
             const active = isToolbarActive(editor, item);

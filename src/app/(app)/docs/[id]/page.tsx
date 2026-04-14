@@ -1,7 +1,12 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { requireUser } from "@/lib/auth/session";
-import { getDocumentAccess, getDocumentSharingState } from "@/lib/documents";
+import { getDocumentComments } from "@/lib/comments";
+import {
+  getDocumentAccess,
+  getDocumentSharingState,
+  listInviteCandidatesForDocument,
+} from "@/lib/documents";
 import { CollaborativeEditor } from "@/components/editor/collaborative-editor";
 import { CommandPaletteRegistration } from "@/components/command/command-palette-provider";
 import { DocumentHeaderActions } from "@/components/docs/document-header-actions";
@@ -120,7 +125,22 @@ export default async function DocumentPage({
   const isDeleted = Boolean(access.document.deletedAt);
   const pageCanEdit = access.canEdit && !isDeleted;
   const pageCanShare = access.canShare && !isDeleted;
-  const sharingState = await getDocumentSharingState(access.document.id);
+  const canComment = access.source === "member" && !isDeleted;
+  const [sharingState, comments, inviteCandidates] = await Promise.all([
+    getDocumentSharingState(access.document.id),
+    canComment
+      ? getDocumentComments({
+          documentId: access.document.id,
+          userId: user.id,
+        })
+      : Promise.resolve([]),
+    pageCanShare
+      ? listInviteCandidatesForDocument({
+          documentId: access.document.id,
+          currentUserId: user.id,
+        })
+      : Promise.resolve([]),
+  ]);
 
   if (!sharingState) {
     notFound();
@@ -200,6 +220,7 @@ export default async function DocumentPage({
                 role: member.role,
                 user: member.user,
               }))}
+              inviteCandidates={inviteCandidates}
               shareLinks={sharingState.shareLinks}
               activities={sharingState.activities.map((activity) => ({
                 id: activity.id,
@@ -210,6 +231,15 @@ export default async function DocumentPage({
                     ? (activity.metadata as Record<string, unknown>)
                     : null,
                 actor: activity.actor,
+              }))}
+              currentUserId={user.id}
+              canComment={canComment}
+              comments={(comments ?? []).map((comment) => ({
+                id: comment.id,
+                content: comment.content,
+                createdAt: comment.createdAt,
+                updatedAt: comment.updatedAt,
+                author: comment.author,
               }))}
             />
           </div>

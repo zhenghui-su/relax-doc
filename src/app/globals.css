@@ -188,6 +188,93 @@ button,
   background-clip: padding-box;
 }
 
+.share-modal-segmented {
+  border-radius: 0.75rem !important;
+  background: #f4f4f1 !important;
+  padding: 0.25rem !important;
+}
+
+.share-modal-segmented .ant-segmented-group {
+  display: flex;
+  gap: 0.125rem;
+}
+
+.share-modal-segmented .ant-segmented-item {
+  flex: 1 1 0%;
+  min-width: 0;
+  border-radius: 0.625rem !important;
+  color: var(--muted);
+}
+
+.share-modal-segmented .ant-segmented-item-selected {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08) !important;
+}
+
+.share-modal-segmented .ant-segmented-item-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  gap: 0.1875rem;
+  padding: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.share-modal-segmented .ant-segmented-item-label .h-4,
+.share-modal-segmented .ant-segmented-item-label .w-4 {
+  height: 0.875rem;
+  width: 0.875rem;
+}
+
+.share-modal-select.ant-select {
+  width: 100%;
+}
+
+.share-modal-select .ant-select-selector {
+  border-radius: 0.625rem !important;
+  border-color: rgba(55, 53, 47, 0.12) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+  min-height: 2.25rem !important;
+  padding-inline: 0.75rem !important;
+}
+
+.share-modal-select.ant-select-focused .ant-select-selector,
+.share-modal-select.ant-select-open .ant-select-selector {
+  border-color: rgba(55, 53, 47, 0.22) !important;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08) !important;
+}
+
+.share-modal-select .ant-select-selection-item,
+.share-modal-select .ant-select-selection-placeholder {
+  line-height: 2.1rem !important;
+  font-size: 0.875rem;
+}
+
+.share-modal-select-role .ant-select-selector {
+  padding-inline: 0.375rem !important;
+}
+
+.share-modal-select-compact .ant-select-selector {
+  min-height: 1.75rem !important;
+  padding-inline: 0.375rem !important;
+}
+
+.share-modal-select-compact .ant-select-selection-item {
+  line-height: 1.65rem !important;
+  font-size: 0.75rem !important;
+}
+
+.share-modal-dropdown .ant-select-item {
+  border-radius: 0.625rem;
+  margin: 0.125rem 0;
+}
+
+.share-modal-dropdown .ant-select-item-option-content {
+  font-size: 0.875rem;
+}
+
 .ProseMirror {
   min-height: 64vh;
   color: var(--foreground);

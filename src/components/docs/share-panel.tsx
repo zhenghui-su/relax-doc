@@ -1,722 +1,841 @@
 'use client';
 
-import { type ShareAccess } from "@prisma/client";
-import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { type ShareAccess } from '@prisma/client';
+import { message, Popconfirm, Segmented, Select } from 'antd';
+import { useMemo, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import {
-  createShareLinkAction,
-  inviteDocumentMemberAction,
-  removeDocumentMemberAction,
-  updateDocumentMemberRoleAction,
-} from "@/app/actions/sharing";
-import { ModalShell } from "@/components/ui/modal-shell";
-import { showToast } from "@/lib/toast";
-import { cn, nameFromEmail, roleLabel, userColorFromString } from "@/lib/utils";
+	createShareLinkAction,
+	inviteDocumentMemberAction,
+	removeDocumentMemberAction,
+	updateDocumentMemberRoleAction,
+} from '@/app/actions/sharing';
+import { ModalShell } from '@/components/ui/modal-shell';
+import { cn, nameFromEmail, roleLabel, userColorFromString } from '@/lib/utils';
 
-type ShareMode = ShareAccess | "disabled";
+type ShareMode = ShareAccess | 'disabled';
 
 type SharePanelProps = {
-  documentId: string;
-  appUrl: string;
-  canManage: boolean;
-  owner: {
-    id: string;
-    name: string | null;
-    email: string;
-  };
-  members: Array<{
-    id: string;
-    role: "owner" | "editor" | "viewer";
-    user: {
-      id: string;
-      name: string | null;
-      email: string;
-    };
-  }>;
-  shareLinks: Array<{
-    id: string;
-    token: string;
-    role: ShareAccess;
-    isActive: boolean;
-  }>;
-  activities: Array<{
-    id: string;
-    type:
-      | "created"
-      | "renamed"
-      | "archived"
-      | "restored"
-      | "trashed"
-      | "moved"
-      | "memberInvited"
-      | "memberRoleChanged"
-      | "memberRemoved"
-      | "shareEnabled"
-      | "shareDisabled";
-    createdAt: Date;
-    metadata: Record<string, unknown> | null;
-    actor: {
-      id: string;
-      name: string | null;
-      email: string;
-    } | null;
-  }>;
+	documentId: string;
+	appUrl: string;
+	canManage: boolean;
+	owner: {
+		id: string;
+		name: string | null;
+		email: string;
+	};
+	members: Array<{
+		id: string;
+		role: 'owner' | 'editor' | 'viewer';
+		user: {
+			id: string;
+			name: string | null;
+			email: string;
+		};
+	}>;
+	inviteCandidates: Array<{
+		id: string;
+		name: string | null;
+		email: string;
+	}>;
+	shareLinks: Array<{
+		id: string;
+		token: string;
+		role: ShareAccess;
+		isActive: boolean;
+	}>;
+	activities: Array<{
+		id: string;
+		type:
+			| 'created'
+			| 'renamed'
+			| 'archived'
+			| 'restored'
+			| 'trashed'
+			| 'moved'
+			| 'memberInvited'
+			| 'memberRoleChanged'
+			| 'memberRemoved'
+			| 'shareEnabled'
+			| 'shareDisabled';
+		createdAt: Date;
+		metadata: Record<string, unknown> | null;
+		actor: {
+			id: string;
+			name: string | null;
+			email: string;
+		} | null;
+	}>;
 };
 
 const shareOptions: Array<{
-  value: ShareMode;
-  label: string;
-  description: string;
+	value: ShareMode;
+	label: string;
+	shortLabel: string;
+	icon: React.ReactNode;
 }> = [
-  {
-    value: "disabled",
-    label: "关闭外链",
-    description: "仅成员可访问",
-  },
-  {
-    value: "viewer",
-    label: "仅查看",
-    description: "持链用户可以查看",
-  },
-  {
-    value: "editor",
-    label: "可编辑",
-    description: "持链用户可以编辑",
-  },
+	{
+		value: 'disabled',
+		label: '关闭外链',
+		shortLabel: '关闭',
+		icon: (
+			<svg viewBox='0 0 20 20' fill='none' className='h-4 w-4'>
+				<path
+					d='M5.75 5.75 14.25 14.25M14.25 5.75 5.75 14.25'
+					stroke='currentColor'
+					strokeWidth='1.5'
+					strokeLinecap='round'
+				/>
+			</svg>
+		),
+	},
+	{
+		value: 'viewer',
+		label: '仅查看',
+		shortLabel: '查看',
+		icon: (
+			<svg viewBox='0 0 20 20' fill='none' className='h-4 w-4'>
+				<path
+					d='M2.75 10s2.5-4.25 7.25-4.25S17.25 10 17.25 10 14.75 14.25 10 14.25 2.75 10 2.75 10Z'
+					stroke='currentColor'
+					strokeWidth='1.45'
+					strokeLinejoin='round'
+				/>
+				<circle
+					cx='10'
+					cy='10'
+					r='2.25'
+					stroke='currentColor'
+					strokeWidth='1.45'
+				/>
+			</svg>
+		),
+	},
+	{
+		value: 'editor',
+		label: '可编辑',
+		shortLabel: '编辑',
+		icon: (
+			<svg viewBox='0 0 20 20' fill='none' className='h-4 w-4'>
+				<path
+					d='m12.25 4.75 3 3M5 15l2.4-.45a1 1 0 0 0 .52-.28l6.38-6.37a1 1 0 0 0 0-1.42l-1.88-1.88a1 1 0 0 0-1.42 0L4.62 10.97a1 1 0 0 0-.28.52L3.9 13.9A.85.85 0 0 0 5 15Z'
+					stroke='currentColor'
+					strokeWidth='1.45'
+					strokeLinejoin='round'
+				/>
+			</svg>
+		),
+	},
 ];
 
 function ShareIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4">
-      <path
-        d="M13.75 6.25a2.25 2.25 0 1 0-2.05-3.18L7.9 5.24a2.25 2.25 0 0 0 0 4.52l3.8 2.17a2.25 2.25 0 1 0 .7-1.22L8.6 8.54a2.26 2.26 0 0 0 0-1.08l3.8-2.17c.38.58 1.03.96 1.75.96Z"
-        stroke="currentColor"
-        strokeWidth="1.45"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+	return (
+		<svg viewBox='0 0 20 20' fill='none' className='h-4 w-4'>
+			<path
+				d='M13.75 6.25a2.25 2.25 0 1 0-2.05-3.18L7.9 5.24a2.25 2.25 0 0 0 0 4.52l3.8 2.17a2.25 2.25 0 1 0 .7-1.22L8.6 8.54a2.26 2.26 0 0 0 0-1.08l3.8-2.17c.38.58 1.03.96 1.75.96Z'
+				stroke='currentColor'
+				strokeWidth='1.45'
+				strokeLinecap='round'
+				strokeLinejoin='round'
+			/>
+		</svg>
+	);
 }
 
 function CloseIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4">
-      <path
-        d="m6 6 8 8m0-8-8 8"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
+	return (
+		<svg viewBox='0 0 20 20' fill='none' className='h-4 w-4'>
+			<path
+				d='m6 6 8 8m0-8-8 8'
+				stroke='currentColor'
+				strokeWidth='1.7'
+				strokeLinecap='round'
+			/>
+		</svg>
+	);
 }
 
 function HistoryIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4">
-      <path
-        d="M10 4.5a5.5 5.5 0 1 1-5.2 7.3M5 6v4h4M10 7.25v3l2.1 1.35"
-        stroke="currentColor"
-        strokeWidth="1.45"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function UsersIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4">
-      <path
-        d="M6.75 8.25a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM13.25 9.25a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM4 15.25a2.75 2.75 0 0 1 5.5 0v.5H4v-.5ZM10.5 15.75v-.5a2.75 2.75 0 0 1 5.5 0v.5h-5.5Z"
-        stroke="currentColor"
-        strokeWidth="1.45"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+	return (
+		<svg viewBox='0 0 20 20' fill='none' className='h-4 w-4'>
+			<path
+				d='M10 4.5a5.5 5.5 0 1 1-5.2 7.3M5 6v4h4M10 7.25v3l2.1 1.35'
+				stroke='currentColor'
+				strokeWidth='1.45'
+				strokeLinecap='round'
+				strokeLinejoin='round'
+			/>
+		</svg>
+	);
 }
 
 function CopyIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4">
-      <path
-        d="M7.25 6.25V5a1 1 0 0 1 1-1h6.25a1 1 0 0 1 1 1v8.75a1 1 0 0 1-1 1H8.25a1 1 0 0 1-1-1v-1.25M5.5 7.25h6.25a1 1 0 0 1 1 1V15a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1V8.25a1 1 0 0 1 1-1Z"
-        stroke="currentColor"
-        strokeWidth="1.45"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
+	return (
+		<svg viewBox='0 0 20 20' fill='none' className='h-4 w-4'>
+			<path
+				d='M7.25 6.25V5a1 1 0 0 1 1-1h6.25a1 1 0 0 1 1 1v8.75a1 1 0 0 1-1 1H8.25a1 1 0 0 1-1-1v-1.25M5.5 7.25h6.25a1 1 0 0 1 1 1V15a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1V8.25a1 1 0 0 1 1-1Z'
+				stroke='currentColor'
+				strokeWidth='1.45'
+				strokeLinejoin='round'
+			/>
+		</svg>
+	);
+}
+
+function ChevronIcon({ open = false }: { open?: boolean }) {
+	return (
+		<svg
+			viewBox='0 0 20 20'
+			fill='none'
+			className={cn('h-4 w-4 transition', open ? 'rotate-180' : '')}
+		>
+			<path
+				d='m5.75 7.75 4.25 4.5 4.25-4.5'
+				stroke='currentColor'
+				strokeWidth='1.5'
+				strokeLinecap='round'
+				strokeLinejoin='round'
+			/>
+		</svg>
+	);
 }
 
 function getInitial(name: string | null, email: string) {
-  return Array.from((name?.trim() || email).trim())[0]?.toUpperCase() ?? "?";
+	return Array.from((name?.trim() || email).trim())[0]?.toUpperCase() ?? '?';
 }
 
 function formatRelativeTime(value: Date) {
-  const now = Date.now();
-  const target = new Date(value).getTime();
-  const diff = now - target;
-  const minute = 60 * 1000;
-  const hour = 60 * minute;
-  const day = 24 * hour;
+	const now = Date.now();
+	const target = new Date(value).getTime();
+	const diff = now - target;
+	const minute = 60 * 1000;
+	const hour = 60 * minute;
+	const day = 24 * hour;
 
-  if (diff < minute) {
-    return "刚刚";
-  }
+	if (diff < minute) {
+		return '刚刚';
+	}
 
-  if (diff < hour) {
-    return `${Math.max(1, Math.floor(diff / minute))} 分钟前`;
-  }
+	if (diff < hour) {
+		return `${Math.max(1, Math.floor(diff / minute))} 分钟前`;
+	}
 
-  if (diff < day) {
-    return `${Math.max(1, Math.floor(diff / hour))} 小时前`;
-  }
+	if (diff < day) {
+		return `${Math.max(1, Math.floor(diff / hour))} 小时前`;
+	}
 
-  if (diff < 30 * day) {
-    return `${Math.max(1, Math.floor(diff / day))} 天前`;
-  }
+	if (diff < 30 * day) {
+		return `${Math.max(1, Math.floor(diff / day))} 天前`;
+	}
 
-  const date = new Date(value);
-  const currentYear = new Date().getFullYear();
+	const date = new Date(value);
+	const currentYear = new Date().getFullYear();
 
-  if (date.getFullYear() === currentYear) {
-    return new Intl.DateTimeFormat("zh-CN", {
-      month: "numeric",
-      day: "numeric",
-    }).format(date);
-  }
+	if (date.getFullYear() === currentYear) {
+		return new Intl.DateTimeFormat('zh-CN', {
+			month: 'numeric',
+			day: 'numeric',
+		}).format(date);
+	}
 
-  return new Intl.DateTimeFormat("zh-CN", {
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  }).format(date);
+	return new Intl.DateTimeFormat('zh-CN', {
+		year: 'numeric',
+		month: 'numeric',
+		day: 'numeric',
+	}).format(date);
 }
 
 function actorLabel(actor: { name: string | null; email: string } | null) {
-  if (!actor) {
-    return "未知成员";
-  }
+	if (!actor) {
+		return '未知成员';
+	}
 
-  return actor.name?.trim() || nameFromEmail(actor.email);
+	return actor.name?.trim() || nameFromEmail(actor.email);
 }
 
 function metadataLabel(value: unknown) {
-  return typeof value === "string" && value.trim() ? value : null;
+	return typeof value === 'string' && value.trim() ? value : null;
 }
 
-function describeActivity(activity: SharePanelProps["activities"][number]) {
-  const actor = actorLabel(activity.actor);
-  const metadata = activity.metadata ?? {};
-  const targetLabel = metadataLabel(metadata.targetUserLabel);
-  const role = metadataLabel(metadata.role);
-  const title = metadataLabel(metadata.title);
+function describeActivity(activity: SharePanelProps['activities'][number]) {
+	const actor = actorLabel(activity.actor);
+	const metadata = activity.metadata ?? {};
+	const targetLabel = metadataLabel(metadata.targetUserLabel);
+	const role = metadataLabel(metadata.role);
+	const title = metadataLabel(metadata.title);
 
-  switch (activity.type) {
-    case "created":
-      return `${actor} 创建了文档`;
-    case "renamed":
-      return `${actor} 将标题更新为“${title || "未命名文档"}”`;
-    case "archived":
-      return `${actor} 归档了文档`;
-    case "restored":
-      return `${actor} 恢复了文档`;
-    case "trashed":
-      return `${actor} 将文档移入回收站`;
-    case "moved":
-      return `${actor} 调整了页面层级`;
-    case "memberInvited":
-      return `${actor} 邀请 ${targetLabel || "新成员"} 加入文档`;
-    case "memberRoleChanged":
-      return `${actor} 将 ${targetLabel || "成员"} 的权限改为 ${roleLabel((role as "editor" | "viewer") || "viewer")}`;
-    case "memberRemoved":
-      return `${actor} 移除了 ${targetLabel || "成员"}`;
-    case "shareEnabled":
-      return `${actor} 开启了${role === "editor" ? "可编辑" : "只读"}外链`;
-    case "shareDisabled":
-      return `${actor} 关闭了公开分享`;
-    default:
-      return `${actor} 更新了文档`;
-  }
+	switch (activity.type) {
+		case 'created':
+			return `${actor} 创建了文档`;
+		case 'renamed':
+			return `${actor} 将标题更新为“${title || '未命名文档'}”`;
+		case 'archived':
+			return `${actor} 归档了文档`;
+		case 'restored':
+			return `${actor} 恢复了文档`;
+		case 'trashed':
+			return `${actor} 将文档移入回收站`;
+		case 'moved':
+			return `${actor} 调整了页面层级`;
+		case 'memberInvited':
+			return `${actor} 邀请 ${targetLabel || '新成员'} 加入文档`;
+		case 'memberRoleChanged':
+			return `${actor} 将 ${targetLabel || '成员'} 的权限改为 ${roleLabel((role as 'editor' | 'viewer') || 'viewer')}`;
+		case 'memberRemoved':
+			return `${actor} 移除了 ${targetLabel || '成员'}`;
+		case 'shareEnabled':
+			return `${actor} 开启了${role === 'editor' ? '可编辑' : '只读'}外链`;
+		case 'shareDisabled':
+			return `${actor} 关闭了公开分享`;
+		default:
+			return `${actor} 更新了文档`;
+	}
 }
 
 function CollaboratorAvatar({
-  name,
-  email,
+	name,
+	email,
 }: {
-  name: string | null;
-  email: string;
+	name: string | null;
+	email: string;
 }) {
-  const initial = getInitial(name, email);
+	const initial = getInitial(name, email);
 
-  return (
-    <span
-      className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
-      style={{ backgroundColor: userColorFromString(email) }}
-    >
-      {initial}
-    </span>
-  );
+	return (
+		<span
+			className='inline-flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white'
+			style={{ backgroundColor: userColorFromString(email) }}
+		>
+			{initial}
+		</span>
+	);
 }
 
 function MemberRow({
-  documentId,
-  member,
-  canManage,
-  onRoleChange,
-  onRemove,
-  pending,
+	documentId,
+	member,
+	canManage,
+	onRoleChange,
+	onRemove,
+	pending,
 }: {
-  documentId: string;
-  member: SharePanelProps["members"][number];
-  canManage: boolean;
-  onRoleChange: (input: {
-    documentId: string;
-    memberId: string;
-    role: "editor" | "viewer";
-  }) => void;
-  onRemove: (input: {
-    documentId: string;
-    memberId: string;
-  }) => void;
-  pending: boolean;
+	documentId: string;
+	member: SharePanelProps['members'][number];
+	canManage: boolean;
+	onRoleChange: (input: {
+		documentId: string;
+		memberId: string;
+		role: 'editor' | 'viewer';
+	}) => void;
+	onRemove: (input: { documentId: string; memberId: string }) => void;
+	pending: boolean;
 }) {
-  return (
-    <div className="flex items-center gap-3 rounded-[20px] bg-[#fafaf8] px-3 py-3">
-      <CollaboratorAvatar name={member.user.name} email={member.user.email} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-foreground">
-          {member.user.name?.trim() || nameFromEmail(member.user.email)}
-        </p>
-        <p className="truncate text-xs text-muted">{member.user.email}</p>
-      </div>
+	return (
+		<div className='group/member flex flex-col gap-2 border-b border-black/6 py-3 last:border-b-0'>
+			<div className='flex items-center justify-between gap-3'>
+				<div className='flex min-w-0 flex-1 items-center gap-3'>
+					<CollaboratorAvatar
+						name={member.user.name}
+						email={member.user.email}
+					/>
+					<div className='min-w-0 flex-1'>
+						<div className='flex flex-wrap items-center gap-2'>
+							<p className='truncate text-sm font-medium text-foreground'>
+								{member.user.name?.trim() || nameFromEmail(member.user.email)}
+							</p>
+							<span className='inline-flex rounded-full bg-[#f4f4f1] px-2 py-0.5 text-[11px] font-semibold text-muted'>
+								{member.role === 'owner' ? '所有者' : roleLabel(member.role)}
+							</span>
+						</div>
+						<p className='mt-1 truncate text-xs text-muted'>
+							{member.user.email}
+						</p>
+					</div>
+				</div>
 
-      <div className="flex items-center gap-2">
-        <span className="inline-flex rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-muted ring-1 ring-black/6">
-          {member.role === "owner" ? "所有者" : roleLabel(member.role)}
-        </span>
+				{canManage && member.role !== 'owner' ? (
+					<div className='flex shrink-0 items-center gap-1.5 opacity-70 transition group-hover/member:opacity-100'>
+						<Select
+							value={member.role}
+							disabled={pending}
+							size='small'
+							popupMatchSelectWidth={false}
+							className='share-modal-select share-modal-select-compact min-w-[96px]'
+							options={[
+								{ value: 'editor', label: '可编辑' },
+								{ value: 'viewer', label: '只读' },
+							]}
+							onChange={(role) => {
+								if (role === member.role) {
+									return;
+								}
 
-        {canManage && member.role !== "owner" ? (
-          <>
-            <select
-              value={member.role}
-              disabled={pending}
-              onChange={(event) => {
-                const role = event.target.value as "editor" | "viewer";
-                if (role === member.role) {
-                  return;
-                }
+								onRoleChange({
+									documentId,
+									memberId: member.user.id,
+									role: role as 'editor' | 'viewer',
+								});
+							}}
+						/>
 
-                onRoleChange({
-                  documentId,
-                  memberId: member.user.id,
-                  role,
-                });
-              }}
-              className="h-9 rounded-xl border border-black/8 bg-white px-3 text-sm text-foreground outline-none"
-            >
-              <option value="editor">可编辑</option>
-              <option value="viewer">只读</option>
-            </select>
-
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => onRemove({ documentId, memberId: member.user.id })}
-              className="inline-flex h-9 items-center justify-center rounded-xl px-3 text-sm font-medium text-[#b94728] transition hover:bg-[#fff1ee] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              移除
-            </button>
-          </>
-        ) : null}
-      </div>
-    </div>
-  );
+						<Popconfirm
+							title='移除成员'
+							description='移除后该成员将失去当前文档访问权限'
+							okText='移除'
+							cancelText='取消'
+							placement='bottomRight'
+							onConfirm={() =>
+								onRemove({ documentId, memberId: member.user.id })
+							}
+							disabled={pending}
+						>
+							<button
+								type='button'
+								disabled={pending}
+								className='inline-flex h-7 min-w-[54px] items-center justify-center whitespace-nowrap rounded-md px-2 text-xs font-medium text-muted transition hover:bg-[#fff1ee] hover:text-[#b94728] disabled:cursor-not-allowed disabled:opacity-60'
+							>
+								移除
+							</button>
+						</Popconfirm>
+					</div>
+				) : null}
+			</div>
+		</div>
+	);
 }
 
 export function SharePanel({
-  documentId,
-  appUrl,
-  canManage,
-  owner,
-  members,
-  shareLinks,
-  activities,
+	documentId,
+	appUrl,
+	canManage,
+	owner,
+	members,
+	inviteCandidates,
+	shareLinks,
+	activities,
 }: SharePanelProps) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [shareMode, setShareMode] = useState<ShareMode>(() => {
-    return shareLinks.find((link) => link.isActive)?.role ?? "disabled";
-  });
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"editor" | "viewer">("editor");
-  const [isSharePending, startShareTransition] = useTransition();
-  const [isInvitePending, startInviteTransition] = useTransition();
-  const [isMemberPending, startMemberTransition] = useTransition();
+	const router = useRouter();
+	const [open, setOpen] = useState(false);
+	const [shareMode, setShareMode] = useState<ShareMode>(() => {
+		return shareLinks.find((link) => link.isActive)?.role ?? 'disabled';
+	});
+	const [inviteEmail, setInviteEmail] = useState('');
+	const [inviteRole, setInviteRole] = useState<'editor' | 'viewer'>('editor');
+	const [showActivity, setShowActivity] = useState(false);
+	const [isSharePending, startShareTransition] = useTransition();
+	const [isInvitePending, startInviteTransition] = useTransition();
+	const [isMemberPending, startMemberTransition] = useTransition();
 
-  const activeLink = useMemo(() => {
-    return shareLinks.find((link) => link.isActive) ?? null;
-  }, [shareLinks]);
+	const activeLink = useMemo(() => {
+		return shareLinks.find((link) => link.isActive) ?? null;
+	}, [shareLinks]);
 
-  const activeRole = activeLink?.role ?? "disabled";
-  const allMembers = useMemo(() => {
-    return [
-      {
-        id: `owner-${owner.id}`,
-        role: "owner" as const,
-        user: owner,
-      },
-      ...members,
-    ];
-  }, [members, owner]);
+	const activeRole = activeLink?.role ?? 'disabled';
+	const activeLinkUrl = activeLink
+		? `${appUrl}/share/${activeLink.token}`
+		: null;
+	const inviteCandidateOptions = useMemo(() => {
+		return inviteCandidates.map((candidate) => ({
+			value: candidate.email,
+			label: candidate.name?.trim() || nameFromEmail(candidate.email),
+			description: candidate.email,
+		}));
+	}, [inviteCandidates]);
+	const inviteRoleOptions = useMemo(() => {
+		return [
+			{
+				value: 'editor',
+				label: '编辑',
+			},
+			{
+				value: 'viewer',
+				label: '只读',
+			},
+		];
+	}, []);
+	const selectedInviteCandidate = useMemo(() => {
+		return (
+			inviteCandidates.find((candidate) => candidate.email === inviteEmail) ??
+			null
+		);
+	}, [inviteCandidates, inviteEmail]);
+	const allMembers = useMemo(() => {
+		return [
+			{
+				id: `owner-${owner.id}`,
+				role: 'owner' as const,
+				user: owner,
+			},
+			...members,
+		];
+	}, [members, owner]);
 
-  async function refreshWithToast(result: {
-    ok?: boolean;
-    message?: string;
-    data?: Record<string, string | boolean | undefined>;
-  }) {
-    if (!result.ok) {
-      showToast({
-        message: result.message || "操作失败。",
-        variant: "error",
-      });
-      return false;
-    }
+	async function refreshWithMessage(result: {
+		ok?: boolean;
+		message?: string;
+		data?: Record<string, string | boolean | undefined>;
+	}) {
+		if (!result.ok) {
+			message.error(result.message || '操作失败');
+			return false;
+		}
 
-    showToast({
-      message: result.message || "操作已完成。",
-      variant: "success",
-    });
-    router.refresh();
-    return true;
-  }
+		message.success(result.message || '操作已完成');
+		router.refresh();
+		return true;
+	}
 
-  function handleShareSubmit() {
-    startShareTransition(async () => {
-      const formData = new FormData();
-      formData.set("documentId", documentId);
-      formData.set("role", shareMode);
+	function handleShareSubmit() {
+		startShareTransition(async () => {
+			const formData = new FormData();
+			formData.set('documentId', documentId);
+			formData.set('role', shareMode);
 
-      const result = await createShareLinkAction({}, formData);
-      const ok = await refreshWithToast(result);
+			const result = await createShareLinkAction({}, formData);
+			const ok = await refreshWithMessage(result);
 
-      if (!ok) {
-        return;
-      }
+			if (!ok) {
+				return;
+			}
 
-      const token = result.data?.token;
+			const token = result.data?.token;
 
-      if (typeof token === "string") {
-        const href = `${appUrl}/share/${token}`;
-        void navigator.clipboard.writeText(href).then(
-          () => {
-            showToast({
-              message: "分享链接已复制到剪贴板。",
-              variant: "success",
-            });
-          },
-          () => {
-            showToast({
-              message: "链接已生成，但自动复制失败。",
-              variant: "error",
-            });
-          },
-        );
-      }
-    });
-  }
+			if (typeof token === 'string') {
+				const href = `${appUrl}/share/${token}`;
 
-  function handleInviteSubmit() {
-    startInviteTransition(async () => {
-      const formData = new FormData();
-      formData.set("documentId", documentId);
-      formData.set("email", inviteEmail);
-      formData.set("role", inviteRole);
+				try {
+					await navigator.clipboard.writeText(href);
+					message.success('分享链接已复制到剪贴板');
+				} catch {
+					message.error('链接已生成，但自动复制失败');
+				}
+			}
 
-      const result = await inviteDocumentMemberAction({}, formData);
-      const ok = await refreshWithToast(result);
+			setOpen(false);
+		});
+	}
 
-      if (!ok) {
-        return;
-      }
+	function handleInviteSubmit() {
+		startInviteTransition(async () => {
+			const formData = new FormData();
+			formData.set('documentId', documentId);
+			formData.set('email', inviteEmail);
+			formData.set('role', inviteRole);
 
-      setInviteEmail("");
-    });
-  }
+			const result = await inviteDocumentMemberAction({}, formData);
+			const ok = await refreshWithMessage(result);
 
-  function handleRoleChange(input: {
-    documentId: string;
-    memberId: string;
-    role: "editor" | "viewer";
-  }) {
-    startMemberTransition(async () => {
-      const formData = new FormData();
-      formData.set("documentId", input.documentId);
-      formData.set("memberId", input.memberId);
-      formData.set("role", input.role);
-      const result = await updateDocumentMemberRoleAction({}, formData);
-      await refreshWithToast(result);
-    });
-  }
+			if (!ok) {
+				return;
+			}
 
-  function handleRemove(input: {
-    documentId: string;
-    memberId: string;
-  }) {
-    startMemberTransition(async () => {
-      const formData = new FormData();
-      formData.set("documentId", input.documentId);
-      formData.set("memberId", input.memberId);
-      const result = await removeDocumentMemberAction({}, formData);
-      await refreshWithToast(result);
-    });
-  }
+			setInviteEmail('');
+		});
+	}
 
-  async function copyCurrentLink() {
-    if (!activeLink) {
-      showToast({
-        message: "当前没有可用的公开链接。",
-        variant: "error",
-      });
-      return;
-    }
+	function handleRoleChange(input: {
+		documentId: string;
+		memberId: string;
+		role: 'editor' | 'viewer';
+	}) {
+		startMemberTransition(async () => {
+			const formData = new FormData();
+			formData.set('documentId', input.documentId);
+			formData.set('memberId', input.memberId);
+			formData.set('role', input.role);
+			const result = await updateDocumentMemberRoleAction({}, formData);
+			await refreshWithMessage(result);
+		});
+	}
 
-    const href = `${appUrl}/share/${activeLink.token}`;
-    try {
-      await navigator.clipboard.writeText(href);
-      showToast({
-        message: "分享链接已复制。",
-        variant: "success",
-      });
-    } catch {
-      showToast({
-        message: "复制失败，请稍后重试。",
-        variant: "error",
-      });
-    }
-  }
+	function handleRemove(input: { documentId: string; memberId: string }) {
+		startMemberTransition(async () => {
+			const formData = new FormData();
+			formData.set('documentId', input.documentId);
+			formData.set('memberId', input.memberId);
+			const result = await removeDocumentMemberAction({}, formData);
+			await refreshWithMessage(result);
+		});
+	}
 
-  function openModal() {
-    setShareMode(activeRole);
-    setOpen(true);
-  }
+	async function copyCurrentLink() {
+		if (!activeLink) {
+			message.error('当前没有可用的公开链接');
+			return;
+		}
 
-  return (
-    <>
-      <button
-        type="button"
-        onClick={openModal}
-        className="inline-flex h-9 items-center gap-2 rounded-xl px-3 text-sm font-medium text-muted transition hover:bg-black/[0.045] hover:text-foreground focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-black/6"
-      >
-        <ShareIcon />
-        协作
-      </button>
+		const href = `${appUrl}/share/${activeLink.token}`;
+		try {
+			await navigator.clipboard.writeText(href);
+			message.success('分享链接已复制');
+		} catch {
+			message.error('复制失败，请稍后重试');
+		}
+	}
 
-      {open ? (
-        <ModalShell
-          onClose={() => setOpen(false)}
-          className="w-full max-w-4xl rounded-[30px] border border-black/8 bg-white p-0 shadow-[0_24px_80px_rgba(15,23,42,0.18)]"
-        >
-          <div className="flex items-center justify-between gap-4 border-b border-black/6 px-6 py-5">
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">协作与分享</h2>
-              <p className="mt-1 text-sm text-muted">
-                管理外链权限、团队成员和最近的协作动态。
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/[0.045] text-muted transition hover:bg-black/[0.08] hover:text-foreground"
-              aria-label="关闭协作面板"
-            >
-              <CloseIcon />
-            </button>
-          </div>
+	function openModal() {
+		setShareMode(activeRole);
+		setShowActivity(false);
+		setInviteEmail('');
+		setOpen(true);
+	}
 
-          <div className="grid gap-0 lg:grid-cols-[1.1fr_0.9fr]">
-            <div className="space-y-6 px-6 py-6">
-              <section className="space-y-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex size-8 items-center justify-center rounded-2xl bg-[#f5f5f3] text-muted">
-                      <ShareIcon />
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">公开链接</p>
-                      <p className="text-xs text-muted">外部访问权限和复制入口</p>
-                    </div>
-                  </div>
+	return (
+		<>
+			<button
+				type='button'
+				onClick={openModal}
+				className='inline-flex h-9 items-center gap-2 rounded-xl px-3 text-sm font-medium text-muted transition hover:bg-black/[0.045] hover:text-foreground focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-black/6'
+			>
+				<ShareIcon />
+				协作
+			</button>
 
-                  {activeLink ? (
-                    <button
-                      type="button"
-                      onClick={() => void copyCurrentLink()}
-                      className="inline-flex h-9 items-center gap-2 rounded-xl bg-[#f5f5f3] px-3 text-sm font-medium text-foreground transition hover:bg-[#efefeb]"
-                    >
-                      <CopyIcon />
-                      复制链接
-                    </button>
-                  ) : null}
-                </div>
+			{open ? (
+				<ModalShell
+					onClose={() => setOpen(false)}
+					className='w-full max-w-[560px] rounded-[18px] border border-black/8 bg-white p-0 shadow-[0_20px_64px_rgba(15,23,42,0.14)]'
+				>
+					<div className='flex max-h-[min(82vh,720px)] flex-col overflow-hidden'>
+						<div className='flex items-center justify-between gap-4 border-b border-black/6 px-4 py-3'>
+							<div className='min-w-0'>
+								<h2 className='text-base font-semibold text-foreground'>
+									协作
+								</h2>
+							</div>
+							<button
+								type='button'
+								onClick={() => setOpen(false)}
+								className='inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-black/[0.05] hover:text-foreground'
+								aria-label='关闭协作面板'
+							>
+								<CloseIcon />
+							</button>
+						</div>
 
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {shareOptions.map((option) => {
-                    const selected = shareMode === option.value;
-                    const highlighted = activeRole === option.value;
+						<div className='min-h-0 overflow-y-auto px-4 py-4'>
+							<div className='space-y-3.5'>
+								<section className='rounded-[14px] border border-black/6 bg-[#fafaf8] p-3.5'>
+									<div className='flex items-center justify-between gap-3'>
+										<div className='min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1'>
+											<p className='text-sm font-semibold text-foreground'>
+												公开访问
+											</p>
+											<p className='text-xs text-muted'>
+												{activeRole === 'disabled'
+													? '仅成员可访问'
+													: `当前外链为${activeRole === 'editor' ? '可编辑' : '仅查看'}`}
+											</p>
+										</div>
+										{activeLinkUrl ? (
+											<button
+												type='button'
+												onClick={() => void copyCurrentLink()}
+												className='inline-flex h-8 shrink-0 items-center gap-2 rounded-md bg-white px-2.5 text-sm font-medium text-foreground ring-1 ring-black/6 transition hover:bg-[#f3f3ef]'
+											>
+												<CopyIcon />
+												复制
+											</button>
+										) : null}
+									</div>
 
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setShareMode(option.value)}
-                        className={cn(
-                          "rounded-[22px] border px-4 py-4 text-left transition",
-                          selected
-                            ? "border-black/12 bg-[#151515] text-white shadow-[0_16px_32px_rgba(15,23,42,0.12)]"
-                            : "border-black/8 bg-[#fafaf8] text-foreground hover:border-black/12 hover:bg-white",
-                        )}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold">{option.label}</p>
-                            <p className={cn("mt-1 text-sm", selected ? "text-white/72" : "text-muted")}>
-                              {option.description}
-                            </p>
-                          </div>
+									<Segmented<ShareMode>
+										value={shareMode}
+										onChange={(value) => setShareMode(value)}
+										className='share-modal-segmented w-full'
+										options={shareOptions.map((option) => ({
+											value: option.value,
+											label: option.shortLabel,
+											icon: option.icon,
+											tooltip: option.label,
+										}))}
+									/>
 
-                          {highlighted ? (
-                            <span
-                              className={cn(
-                                "inline-flex shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                                selected ? "bg-white/14 text-white" : "bg-black/[0.05] text-muted",
-                              )}
-                            >
-                              当前
-                            </span>
-                          ) : null}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
+									<div className='mt-3 flex items-center justify-between gap-3'>
+										<p className='text-xs text-muted'>
+											{shareMode === 'disabled'
+												? '关闭后立即失效'
+												: '保存后自动复制'}
+										</p>
+										{canManage ? (
+											<button
+												type='button'
+												disabled={isSharePending}
+												onClick={handleShareSubmit}
+												className='inline-flex h-8 shrink-0 items-center justify-center rounded-md bg-[#151515] px-3 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-black/30'
+											>
+												{isSharePending
+													? '保存中'
+													: shareMode === 'disabled'
+														? '关闭'
+														: '生成'}
+											</button>
+										) : (
+											<p className='text-xs text-muted'>无权限</p>
+										)}
+									</div>
+								</section>
 
-                {canManage ? (
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] bg-[#fafaf8] px-4 py-3">
-                    <p className="text-sm text-muted">
-                      {shareMode === "disabled"
-                        ? "关闭后，所有公开外链都会立即失效。"
-                        : "保存后会生成新的外链并复制到剪贴板。"}
-                    </p>
-                    <button
-                      type="button"
-                      disabled={isSharePending}
-                      onClick={handleShareSubmit}
-                      className="inline-flex h-10 items-center justify-center rounded-xl bg-[#151515] px-4 text-sm font-semibold text-white shadow-[0_8px_20px_rgba(15,23,42,0.12)] transition hover:bg-black disabled:cursor-not-allowed disabled:bg-black/30"
-                    >
-                      {isSharePending
-                        ? "保存中..."
-                        : (shareMode === "disabled" ? "关闭公开分享" : "生成并复制")}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="rounded-[22px] bg-[#fafaf8] px-4 py-3 text-sm text-muted">
-                    你当前可以查看成员和活动记录，但不能修改外链或成员权限。
-                  </div>
-                )}
-              </section>
+								<section className='rounded-[14px] border border-black/6 bg-white p-3.5'>
+									<div className='flex items-center justify-between gap-3'>
+										<div className='flex items-center gap-2'>
+											<p className='text-sm font-semibold text-foreground'>
+												成员
+											</p>
+											<p className='text-xs text-muted'>
+												共 {allMembers.length} 位
+											</p>
+										</div>
+										<span className='text-xs text-muted'>
+											{canManage ? '可管理' : '只读'}
+										</span>
+									</div>
 
-              <section className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex size-8 items-center justify-center rounded-2xl bg-[#f5f5f3] text-muted">
-                    <UsersIcon />
-                  </span>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">成员</p>
-                    <p className="text-xs text-muted">当前可访问此文档的团队成员</p>
-                  </div>
-                </div>
+									{canManage ? (
+										<div className='mt-3 rounded-[12px] bg-[#fafaf8] p-2'>
+											<div className='grid gap-1.5 sm:grid-cols-[minmax(0,1fr)_84px_68px]'>
+												<Select
+													value={inviteEmail || undefined}
+													showSearch
+													allowClear
+													size='middle'
+													placeholder='选择成员'
+													optionFilterProp='label'
+													popupMatchSelectWidth={false}
+													className='share-modal-select'
+													popupClassName='share-modal-dropdown'
+													options={inviteCandidateOptions.map((option) => ({
+														value: option.value,
+														label: option.label,
+														title: option.description,
+													}))}
+													filterOption={(input, option) => {
+														const label =
+															typeof option?.label === 'string'
+																? option.label
+																: '';
+														const title =
+															typeof option?.title === 'string'
+																? option.title
+																: '';
+														return `${label} ${title}`
+															.toLowerCase()
+															.includes(input.toLowerCase());
+													}}
+													onChange={(value) => setInviteEmail(value ?? '')}
+												/>
+												<Select
+													value={inviteRole}
+													size='middle'
+													popupMatchSelectWidth={false}
+													className='share-modal-select share-modal-select-role'
+													popupClassName='share-modal-dropdown'
+													options={inviteRoleOptions}
+													onChange={(value) =>
+														setInviteRole(value as 'editor' | 'viewer')
+													}
+												/>
+												<button
+													type='button'
+													disabled={isInvitePending || !inviteEmail.trim()}
+													onClick={handleInviteSubmit}
+													className='inline-flex h-9 items-center justify-center rounded-lg bg-[#151515] px-2.5 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-black/30'
+												>
+													{isInvitePending ? '处理中' : '添加'}
+												</button>
+											</div>
 
-                {canManage ? (
-                  <div className="rounded-[24px] bg-[#fafaf8] p-4">
-                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_136px_auto]">
-                      <input
-                        type="email"
-                        value={inviteEmail}
-                        onChange={(event) => setInviteEmail(event.target.value)}
-                        placeholder="输入已注册成员邮箱"
-                        className="h-11 rounded-xl border border-black/8 bg-white px-3 text-sm text-foreground outline-none placeholder:text-muted"
-                      />
-                      <select
-                        value={inviteRole}
-                        onChange={(event) => setInviteRole(event.target.value as "editor" | "viewer")}
-                        className="h-11 rounded-xl border border-black/8 bg-white px-3 text-sm text-foreground outline-none"
-                      >
-                        <option value="editor">可编辑</option>
-                        <option value="viewer">只读</option>
-                      </select>
-                      <button
-                        type="button"
-                        disabled={isInvitePending || !inviteEmail.trim()}
-                        onClick={handleInviteSubmit}
-                        className="inline-flex h-11 items-center justify-center rounded-xl bg-[#151515] px-4 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:bg-black/30"
-                      >
-                        {isInvitePending ? "邀请中..." : "邀请成员"}
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
+											{selectedInviteCandidate ? (
+												<p className='mt-2 truncate text-xs text-muted'>
+													{selectedInviteCandidate.email}
+												</p>
+											) : null}
+										</div>
+									) : null}
 
-                <div className="space-y-2">
-                  {allMembers.map((member) => (
-                    <MemberRow
-                      key={member.id}
-                      documentId={documentId}
-                      member={member}
-                      canManage={canManage}
-                      onRoleChange={handleRoleChange}
-                      onRemove={handleRemove}
-                      pending={isMemberPending}
-                    />
-                  ))}
-                </div>
-              </section>
-            </div>
+									{canManage && inviteCandidates.length === 0 ? (
+										<p className='mt-2 text-xs text-muted'>
+											当前没有可添加的新成员
+										</p>
+									) : null}
 
-            <aside className="border-t border-black/6 bg-[#fbfbfa] px-6 py-6 lg:border-l lg:border-t-0">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex size-8 items-center justify-center rounded-2xl bg-white text-muted ring-1 ring-black/6">
-                  <HistoryIcon />
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">最近活动</p>
-                  <p className="text-xs text-muted">帮助成员了解最近谁改了什么</p>
-                </div>
-              </div>
+									<div className='mt-3'>
+										{allMembers.map((member) => (
+											<MemberRow
+												key={member.id}
+												documentId={documentId}
+												member={member}
+												canManage={canManage}
+												onRoleChange={handleRoleChange}
+												onRemove={handleRemove}
+												pending={isMemberPending}
+											/>
+										))}
+									</div>
+								</section>
 
-              <div className="mt-4 space-y-3">
-                {activities.length > 0 ? (
-                  activities.map((activity) => (
-                    <div key={activity.id} className="rounded-[22px] bg-white px-4 py-3 ring-1 ring-black/6">
-                      <p className="text-sm leading-6 text-foreground">{describeActivity(activity)}</p>
-                      <p className="mt-1 text-xs text-muted">{formatRelativeTime(activity.createdAt)}</p>
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-[22px] bg-white px-4 py-4 text-sm text-muted ring-1 ring-black/6">
-                    暂时还没有协作记录。
-                  </div>
-                )}
-              </div>
-            </aside>
-          </div>
-        </ModalShell>
-      ) : null}
-    </>
-  );
+								<section className='rounded-[14px] border border-black/6 bg-white p-3.5'>
+									<button
+										type='button'
+										onClick={() => setShowActivity((value) => !value)}
+										className='flex w-full items-center justify-between gap-3 text-left'
+									>
+										<div className='flex items-center gap-2'>
+											<span className='inline-flex size-7 items-center justify-center rounded-md bg-[#f4f4f1] text-foreground'>
+												<HistoryIcon />
+											</span>
+											<div>
+												<p className='text-sm font-semibold text-foreground'>
+													最近活动
+												</p>
+												<p className='mt-0.5 text-xs text-muted'>
+													{activities.length} 条记录
+												</p>
+											</div>
+										</div>
+										<ChevronIcon open={showActivity} />
+									</button>
+
+									{showActivity ? (
+										<div className='mt-3 rounded-[12px] bg-[#fafaf8] px-4 py-2'>
+											{activities.length > 0 ? (
+												<div className='space-y-0.5'>
+													{activities.map((activity, index) => (
+														<div
+															key={activity.id}
+															className='grid grid-cols-[16px_minmax(0,1fr)] gap-3 py-3'
+														>
+															<div className='relative flex justify-center'>
+																<span className='mt-1.5 h-2 w-2 rounded-full bg-[#151515]' />
+																{index < activities.length - 1 ? (
+																	<span className='absolute top-4.5 bottom-[-12px] left-1/2 w-px -translate-x-1/2 bg-black/8' />
+																) : null}
+															</div>
+
+															<div className='min-w-0'>
+																<p className='text-[13px] leading-6 text-foreground'>
+																	{describeActivity(activity)}
+																</p>
+																<p className='mt-1 text-[11px] font-medium text-muted'>
+																	{formatRelativeTime(activity.createdAt)}
+																</p>
+															</div>
+														</div>
+													))}
+												</div>
+											) : (
+												<div className='py-4 text-sm text-muted'>
+													暂时还没有协作记录
+												</div>
+											)}
+										</div>
+									) : null}
+								</section>
+							</div>
+						</div>
+					</div>
+				</ModalShell>
+			) : null}
+		</>
+	);
 }

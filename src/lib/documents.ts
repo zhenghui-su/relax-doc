@@ -197,3 +197,51 @@ export async function getDocumentSharingState(documentId: string) {
     },
   });
 }
+
+export async function listInviteCandidatesForDocument(options: {
+  documentId: string;
+  currentUserId: string;
+}) {
+  const document = await prisma.document.findUnique({
+    where: { id: options.documentId },
+    select: {
+      ownerId: true,
+      members: {
+        select: {
+          userId: true,
+        },
+      },
+    },
+  });
+
+  if (!document) {
+    return [];
+  }
+
+  const excludedUserIds = [
+    options.currentUserId,
+    document.ownerId,
+    ...document.members.map((member) => member.userId),
+  ];
+
+  return prisma.user.findMany({
+    where: {
+      id: {
+        notIn: excludedUserIds,
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+    orderBy: [
+      {
+        name: "asc",
+      },
+      {
+        email: "asc",
+      },
+    ],
+  });
+}

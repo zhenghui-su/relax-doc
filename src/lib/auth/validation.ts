@@ -71,6 +71,20 @@ export const disableShareLinkSchema = z.object({
   linkId: z.string().cuid(),
 });
 
+export const createCommentSchema = z.object({
+  documentId: z.string().cuid(),
+  content: z
+    .string()
+    .trim()
+    .min(1, "评论内容不能为空。")
+    .max(2000, "评论内容不能超过 2000 个字符。"),
+});
+
+export const deleteCommentSchema = z.object({
+  documentId: z.string().cuid(),
+  commentId: z.string().cuid(),
+});
+
 export type FormState = {
   ok?: boolean;
   message?: string;

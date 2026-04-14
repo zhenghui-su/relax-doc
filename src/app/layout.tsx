@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AntdRegistry } from "@ant-design/nextjs-registry";
 import "./globals.css";
 import { ToastViewport } from "@/components/ui/toast-viewport";
 
@@ -15,8 +16,10 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" className="h-full antialiased">
       <body className="min-h-full bg-background text-foreground">
-        {children}
-        <ToastViewport />
+        <AntdRegistry>
+          {children}
+          <ToastViewport />
+        </AntdRegistry>
       </body>
     </html>
   );

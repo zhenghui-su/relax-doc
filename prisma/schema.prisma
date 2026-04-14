@@ -44,6 +44,7 @@ model User {
   ownedDocuments Document[]          @relation("OwnedDocuments")
   lastEditedDocuments Document[]     @relation("LastEditedDocuments")
   documentActivities DocumentActivity[] @relation("DocumentActivities")
+  documentComments DocumentComment[] @relation("DocumentComments")
   memberships    DocumentMember[]
   favoriteDocuments DocumentFavorite[]
   createdLinks   DocumentShareLink[]
@@ -116,6 +117,7 @@ model Document {
   favorites      DocumentFavorite[]
   shareLinks     DocumentShareLink[]
   activities     DocumentActivity[]
+  comments       DocumentComment[]
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
@@ -178,4 +180,18 @@ model DocumentActivity {
 
   @@index([documentId, createdAt(sort: Desc)])
   @@index([actorId])
+}
+
+model DocumentComment {
+  id         String   @id @default(cuid())
+  documentId String
+  authorId   String
+  content    String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  author     User     @relation("DocumentComments", fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([documentId, createdAt])
+  @@index([authorId])
 }

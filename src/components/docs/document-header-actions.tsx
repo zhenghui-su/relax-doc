@@ -7,6 +7,7 @@ import {
   toggleArchiveDocumentAction,
   toggleFavoriteDocumentAction,
 } from "@/app/actions/documents";
+import { CommentPanel } from "@/components/docs/comment-panel";
 import { SharePanel } from "@/components/docs/share-panel";
 import { CreateDocumentModal } from "@/components/docs/create-document-modal";
 import { DocumentStateButton } from "@/components/docs/document-state-button";
@@ -40,6 +41,11 @@ type DocumentHeaderActionsProps = {
       email: string;
     };
   }>;
+  inviteCandidates: Array<{
+    id: string;
+    name: string | null;
+    email: string;
+  }>;
   activities: Array<{
     id: string;
     type:
@@ -61,6 +67,19 @@ type DocumentHeaderActionsProps = {
       name: string | null;
       email: string;
     } | null;
+  }>;
+  currentUserId: string;
+  canComment: boolean;
+  comments: Array<{
+    id: string;
+    content: string;
+    createdAt: Date;
+    updatedAt: Date;
+    author: {
+      id: string;
+      name: string | null;
+      email: string;
+    };
   }>;
 };
 
@@ -121,7 +140,11 @@ export function DocumentHeaderActions({
   shareLinks,
   owner,
   members,
+  inviteCandidates,
   activities,
+  currentUserId,
+  canComment,
+  comments,
 }: DocumentHeaderActionsProps) {
   if (isDeleted) {
     return (
@@ -193,8 +216,18 @@ export function DocumentHeaderActions({
           canManage={canShare}
           owner={owner}
           members={members}
+          inviteCandidates={inviteCandidates}
           shareLinks={shareLinks}
           activities={activities}
+        />
+      ) : null}
+
+      {!isDeleted && canComment ? (
+        <CommentPanel
+          documentId={documentId}
+          currentUserId={currentUserId}
+          canComment={canComment}
+          comments={comments}
         />
       ) : null}
     </div>

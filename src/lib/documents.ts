@@ -179,6 +179,21 @@ export async function getDocumentSharingState(documentId: string) {
           createdAt: "desc",
         },
       },
+      activities: {
+        include: {
+          actor: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: 18,
+      },
     },
   });
 }

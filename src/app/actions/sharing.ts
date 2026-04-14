@@ -8,9 +8,12 @@ import { requireUser } from "@/lib/auth/session";
 import {
   disableShareLinkSchema,
   inviteMemberSchema,
+  removeMemberSchema,
   shareLinkSchema,
+  updateMemberRoleSchema,
   type FormState,
 } from "@/lib/auth/validation";
+import { recordDocumentActivity } from "@/lib/document-activity";
 import { getDocumentAccess } from "@/lib/documents";
 
 export async function inviteDocumentMemberAction(
@@ -69,6 +72,22 @@ export async function inviteDocumentMemberAction(
     };
   }
 
+  const existingMember = await prisma.documentMember.findUnique({
+    where: {
+      documentId_userId: {
+        documentId: validated.data.documentId,
+        userId: invitee.id,
+      },
+    },
+  });
+
+  if (existingMember?.role === validated.data.role) {
+    return {
+      ok: true,
+      message: "成员已拥有该权限。",
+    };
+  }
+
   await prisma.documentMember.upsert({
     where: {
       documentId_userId: {
@@ -86,11 +105,204 @@ export async function inviteDocumentMemberAction(
     },
   });
 
+  await recordDocumentActivity({
+    documentId: validated.data.documentId,
+    actorId: user.id,
+    type: existingMember ? "memberRoleChanged" : "memberInvited",
+    metadata: {
+      targetUserId: invitee.id,
+      targetUserLabel: invitee.name?.trim() || invitee.email,
+      role: validated.data.role,
+      previousRole: existingMember?.role ?? null,
+    },
+  });
+
+  revalidatePath("/docs");
+  revalidatePath(`/docs/${validated.data.documentId}`);
+
+  return {
+    ok: true,
+    message: existingMember ? "成员权限已更新。" : "成员已添加。",
+  };
+}
+
+export async function updateDocumentMemberRoleAction(
+  _previousState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const user = await requireUser();
+  const validated = updateMemberRoleSchema.safeParse({
+    documentId: formData.get("documentId"),
+    memberId: formData.get("memberId"),
+    role: formData.get("role"),
+  });
+
+  if (!validated.success) {
+    return {
+      ok: false,
+      message: "更新成员权限失败。",
+      errors: validated.error.flatten().fieldErrors,
+    };
+  }
+
+  const access = await getDocumentAccess({
+    documentId: validated.data.documentId,
+    userId: user.id,
+  });
+
+  if (!access?.canShare) {
+    return {
+      ok: false,
+      message: "只有文档所有者可以管理权限。",
+    };
+  }
+
+  const member = await prisma.documentMember.findUnique({
+    where: {
+      documentId_userId: {
+        documentId: validated.data.documentId,
+        userId: validated.data.memberId,
+      },
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
+  });
+
+  if (!member) {
+    return {
+      ok: false,
+      message: "成员不存在或已被移除。",
+    };
+  }
+
+  if (member.role === validated.data.role) {
+    return {
+      ok: true,
+      message: "成员已拥有该权限。",
+    };
+  }
+
+  await prisma.documentMember.update({
+    where: {
+      documentId_userId: {
+        documentId: validated.data.documentId,
+        userId: validated.data.memberId,
+      },
+    },
+    data: {
+      role: validated.data.role as DocumentRole,
+    },
+  });
+
+  await recordDocumentActivity({
+    documentId: validated.data.documentId,
+    actorId: user.id,
+    type: "memberRoleChanged",
+    metadata: {
+      targetUserId: member.user.id,
+      targetUserLabel: member.user.name?.trim() || member.user.email,
+      role: validated.data.role,
+      previousRole: member.role,
+    },
+  });
+
+  revalidatePath("/docs");
   revalidatePath(`/docs/${validated.data.documentId}`);
 
   return {
     ok: true,
     message: "成员权限已更新。",
+  };
+}
+
+export async function removeDocumentMemberAction(
+  _previousState: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const user = await requireUser();
+  const validated = removeMemberSchema.safeParse({
+    documentId: formData.get("documentId"),
+    memberId: formData.get("memberId"),
+  });
+
+  if (!validated.success) {
+    return {
+      ok: false,
+      message: "移除成员失败。",
+      errors: validated.error.flatten().fieldErrors,
+    };
+  }
+
+  const access = await getDocumentAccess({
+    documentId: validated.data.documentId,
+    userId: user.id,
+  });
+
+  if (!access?.canShare) {
+    return {
+      ok: false,
+      message: "只有文档所有者可以管理权限。",
+    };
+  }
+
+  const member = await prisma.documentMember.findUnique({
+    where: {
+      documentId_userId: {
+        documentId: validated.data.documentId,
+        userId: validated.data.memberId,
+      },
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+    },
+  });
+
+  if (!member) {
+    return {
+      ok: true,
+      message: "成员已被移除。",
+    };
+  }
+
+  await prisma.documentMember.delete({
+    where: {
+      documentId_userId: {
+        documentId: validated.data.documentId,
+        userId: validated.data.memberId,
+      },
+    },
+  });
+
+  await recordDocumentActivity({
+    documentId: validated.data.documentId,
+    actorId: user.id,
+    type: "memberRemoved",
+    metadata: {
+      targetUserId: member.user.id,
+      targetUserLabel: member.user.name?.trim() || member.user.email,
+      previousRole: member.role,
+    },
+  });
+
+  revalidatePath("/docs");
+  revalidatePath(`/docs/${validated.data.documentId}`);
+
+  return {
+    ok: true,
+    message: "成员已移除。",
   };
 }
 
@@ -142,6 +354,13 @@ export async function createShareLinkAction(
   });
 
   if (validated.data.role === "disabled") {
+    await recordDocumentActivity({
+      documentId: validated.data.documentId,
+      actorId: user.id,
+      type: "shareDisabled",
+    });
+
+    revalidatePath("/docs");
     revalidatePath(`/docs/${validated.data.documentId}`);
 
     return {
@@ -164,6 +383,16 @@ export async function createShareLinkAction(
     },
   });
 
+  await recordDocumentActivity({
+    documentId: validated.data.documentId,
+    actorId: user.id,
+    type: "shareEnabled",
+    metadata: {
+      role: validated.data.role,
+    },
+  });
+
+  revalidatePath("/docs");
   revalidatePath(`/docs/${validated.data.documentId}`);
 
   return {
@@ -207,6 +436,13 @@ export async function disableShareLinkAction(formData: FormData) {
     },
   });
 
+  await recordDocumentActivity({
+    documentId: validated.data.documentId,
+    actorId: user.id,
+    type: "shareDisabled",
+  });
+
+  revalidatePath("/docs");
   revalidatePath(`/docs/${validated.data.documentId}`);
 }
 
@@ -254,6 +490,13 @@ export async function disableShareLinkStateAction(
     },
   });
 
+  await recordDocumentActivity({
+    documentId: validated.data.documentId,
+    actorId: user.id,
+    type: "shareDisabled",
+  });
+
+  revalidatePath("/docs");
   revalidatePath(`/docs/${validated.data.documentId}`);
 
   return {

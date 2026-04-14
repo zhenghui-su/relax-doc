@@ -120,9 +120,12 @@ export default async function DocumentPage({
   const isDeleted = Boolean(access.document.deletedAt);
   const pageCanEdit = access.canEdit && !isDeleted;
   const pageCanShare = access.canShare && !isDeleted;
-  const sharingState = pageCanShare
-    ? await getDocumentSharingState(access.document.id)
-    : null;
+  const sharingState = await getDocumentSharingState(access.document.id);
+
+  if (!sharingState) {
+    notFound();
+  }
+
   const metaItems = [
     {
       label: "角色",
@@ -191,7 +194,23 @@ export default async function DocumentPage({
               isDeleted={isDeleted}
               isFavorite={access.document.favorites.length > 0}
               role={access.role}
-              shareLinks={sharingState?.shareLinks ?? []}
+              owner={sharingState.owner}
+              members={sharingState.members.map((member) => ({
+                id: member.id,
+                role: member.role,
+                user: member.user,
+              }))}
+              shareLinks={sharingState.shareLinks}
+              activities={sharingState.activities.map((activity) => ({
+                id: activity.id,
+                type: activity.type,
+                createdAt: activity.createdAt,
+                metadata:
+                  activity.metadata && typeof activity.metadata === "object" && !Array.isArray(activity.metadata)
+                    ? (activity.metadata as Record<string, unknown>)
+                    : null,
+                actor: activity.actor,
+              }))}
             />
           </div>
         </div>

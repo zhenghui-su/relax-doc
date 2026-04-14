@@ -11,6 +11,7 @@ import {
   updateDocumentTitleSchema,
   type FormState,
 } from "@/lib/auth/validation";
+import { recordDocumentActivity } from "@/lib/document-activity";
 import { getDocumentAccess } from "@/lib/documents";
 
 function lastEditedByRelation(userId: string) {
@@ -134,6 +135,16 @@ export async function createDocumentAction(formData: FormData) {
     parentId,
   });
 
+  await recordDocumentActivity({
+    documentId: document.id,
+    actorId: user.id,
+    type: "created",
+    metadata: {
+      title: document.title,
+      parentId,
+    },
+  });
+
   revalidateDocumentViews(document.id);
   redirect(`/docs/${document.id}`);
 }
@@ -173,6 +184,16 @@ export async function quickCreateDocumentAction(input: {
     userId: user.id,
     title: validated.data.title,
     parentId,
+  });
+
+  await recordDocumentActivity({
+    documentId: document.id,
+    actorId: user.id,
+    type: "created",
+    metadata: {
+      title: document.title,
+      parentId,
+    },
   });
 
   await revalidateDocumentViews(document.id);
@@ -232,6 +253,15 @@ export async function updateDocumentTitleAction(
     data: {
       title: validated.data.title,
       ...lastEditedByRelation(user.id),
+    },
+  });
+
+  await recordDocumentActivity({
+    documentId: validated.data.documentId,
+    actorId: user.id,
+    type: "renamed",
+    metadata: {
+      title: validated.data.title,
     },
   });
 
@@ -370,6 +400,12 @@ export async function toggleArchiveDocumentAction(
     },
   });
 
+  await recordDocumentActivity({
+    documentId: validated.data.documentId,
+    actorId: user.id,
+    type: nextArchived ? "archived" : "restored",
+  });
+
   await revalidateDocumentViews(validated.data.documentId);
 
   return {
@@ -423,6 +459,12 @@ export async function moveDocumentToTrashAction(
     },
   });
 
+  await recordDocumentActivity({
+    documentId: validated.data.documentId,
+    actorId: user.id,
+    type: "trashed",
+  });
+
   await revalidateDocumentViews(validated.data.documentId);
 
   return {
@@ -467,6 +509,12 @@ export async function restoreDocumentAction(
       ...lastEditedByRelation(user.id),
       updatedAt: new Date(),
     },
+  });
+
+  await recordDocumentActivity({
+    documentId: validated.data.documentId,
+    actorId: user.id,
+    type: "restored",
   });
 
   await revalidateDocumentViews(validated.data.documentId);
@@ -616,6 +664,15 @@ export async function moveDocumentAction(input: {
           }),
       ...lastEditedByRelation(user.id),
       updatedAt: new Date(),
+    },
+  });
+
+  await recordDocumentActivity({
+    documentId,
+    actorId: user.id,
+    type: "moved",
+    metadata: {
+      parentId,
     },
   });
 

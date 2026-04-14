@@ -50,6 +50,17 @@ export const inviteMemberSchema = z.object({
   role: z.enum(["editor", "viewer"]),
 });
 
+export const updateMemberRoleSchema = z.object({
+  documentId: z.string().cuid(),
+  memberId: z.string().cuid(),
+  role: z.enum(["editor", "viewer"]),
+});
+
+export const removeMemberSchema = z.object({
+  documentId: z.string().cuid(),
+  memberId: z.string().cuid(),
+});
+
 export const shareLinkSchema = z.object({
   documentId: z.string().cuid(),
   role: z.enum(["editor", "viewer", "disabled"]),

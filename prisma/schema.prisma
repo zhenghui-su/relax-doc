@@ -17,6 +17,20 @@ enum ShareAccess {
   viewer
 }
 
+enum DocumentActivityType {
+  created
+  renamed
+  archived
+  restored
+  trashed
+  moved
+  memberInvited
+  memberRoleChanged
+  memberRemoved
+  shareEnabled
+  shareDisabled
+}
+
 model User {
   id             String              @id @default(cuid())
   name           String?
@@ -29,6 +43,7 @@ model User {
   authenticators Authenticator[]
   ownedDocuments Document[]          @relation("OwnedDocuments")
   lastEditedDocuments Document[]     @relation("LastEditedDocuments")
+  documentActivities DocumentActivity[] @relation("DocumentActivities")
   memberships    DocumentMember[]
   favoriteDocuments DocumentFavorite[]
   createdLinks   DocumentShareLink[]
@@ -100,6 +115,7 @@ model Document {
   members        DocumentMember[]
   favorites      DocumentFavorite[]
   shareLinks     DocumentShareLink[]
+  activities     DocumentActivity[]
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
@@ -148,4 +164,18 @@ model DocumentShareLink {
   updatedAt  DateTime    @updatedAt
 
   @@index([documentId, isActive])
+}
+
+model DocumentActivity {
+  id         String               @id @default(cuid())
+  documentId String
+  actorId    String?
+  type       DocumentActivityType
+  metadata   Json?
+  document   Document             @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  actor      User?                @relation("DocumentActivities", fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt  DateTime             @default(now())
+
+  @@index([documentId, createdAt(sort: Desc)])
+  @@index([actorId])
 }

@@ -26,6 +26,42 @@ type DocumentHeaderActionsProps = {
     role: "viewer" | "editor";
     isActive: boolean;
   }>;
+  owner: {
+    id: string;
+    name: string | null;
+    email: string;
+  };
+  members: Array<{
+    id: string;
+    role: "owner" | "editor" | "viewer";
+    user: {
+      id: string;
+      name: string | null;
+      email: string;
+    };
+  }>;
+  activities: Array<{
+    id: string;
+    type:
+      | "created"
+      | "renamed"
+      | "archived"
+      | "restored"
+      | "trashed"
+      | "moved"
+      | "memberInvited"
+      | "memberRoleChanged"
+      | "memberRemoved"
+      | "shareEnabled"
+      | "shareDisabled";
+    createdAt: Date;
+    metadata: Record<string, unknown> | null;
+    actor: {
+      id: string;
+      name: string | null;
+      email: string;
+    } | null;
+  }>;
 };
 
 function StarIcon({
@@ -83,6 +119,9 @@ export function DocumentHeaderActions({
   isFavorite,
   role,
   shareLinks,
+  owner,
+  members,
+  activities,
 }: DocumentHeaderActionsProps) {
   if (isDeleted) {
     return (
@@ -147,11 +186,15 @@ export function DocumentHeaderActions({
         />
       ) : null}
 
-      {canShare ? (
+      {!isDeleted ? (
         <SharePanel
           documentId={documentId}
           appUrl={appUrl}
+          canManage={canShare}
+          owner={owner}
+          members={members}
           shareLinks={shareLinks}
+          activities={activities}
         />
       ) : null}
     </div>

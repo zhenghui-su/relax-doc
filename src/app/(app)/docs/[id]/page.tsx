@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { requireUser } from "@/lib/auth/session";
 import { getDocumentAccess, getDocumentSharingState } from "@/lib/documents";
 import { CollaborativeEditor } from "@/components/editor/collaborative-editor";
+import { CommandPaletteRegistration } from "@/components/command/command-palette-provider";
 import { DocumentHeaderActions } from "@/components/docs/document-header-actions";
 import { DocumentMetaMenu } from "@/components/docs/document-meta-menu";
 import { TitleForm } from "@/components/docs/title-form";
@@ -143,6 +144,19 @@ export default async function DocumentPage({
 
   return (
     <div className="flex w-full flex-col gap-0">
+      <CommandPaletteRegistration
+        document={{
+          documentId: access.document.id,
+          title: access.document.title,
+          canEdit: pageCanEdit,
+          canShare: pageCanShare,
+          isArchived: access.document.isArchived,
+          isDeleted,
+          isFavorite: access.document.favorites.length > 0,
+          role: access.role,
+        }}
+      />
+
       <HeaderSlotRegistration>
         <div className="flex min-w-0 items-center justify-between gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-3">

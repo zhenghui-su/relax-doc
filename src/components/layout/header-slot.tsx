@@ -7,6 +7,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import {
+  CommandPaletteProvider,
+  CommandPaletteTrigger,
+} from "@/components/command/command-palette-provider";
 import { SidebarDocumentsNav } from "@/components/docs/sidebar-documents-nav";
 import { UserMenu } from "@/components/layout/user-menu";
 import { type DocumentListItem } from "@/types/document";
@@ -156,41 +160,44 @@ export function HeaderSlotProvider({
 
   return (
     <HeaderSlotContext.Provider value={setContent}>
-      <div className="flex h-screen max-h-screen min-w-0 flex-1 overflow-hidden">
-        <DesktopSidebar
-          collapsed={collapsed}
-          documents={documents}
-          onToggle={() => setCollapsed((current) => !current)}
-        />
+      <CommandPaletteProvider documents={documents}>
+        <div className="flex h-screen max-h-screen min-w-0 flex-1 overflow-hidden">
+          <DesktopSidebar
+            collapsed={collapsed}
+            documents={documents}
+            onToggle={() => setCollapsed((current) => !current)}
+          />
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <header className="sticky top-0 z-30 border-b border-border bg-background/92 backdrop-blur-xl">
-            <div className="flex min-h-14 items-center gap-3 px-4 py-2 sm:px-6 lg:px-8">
-              <button
-                type="button"
-                onClick={() => setMobileOpen(true)}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-muted transition hover:bg-black/[0.045] hover:text-foreground lg:hidden"
-                aria-label="打开侧边栏"
-              >
-                <SidebarToggleIcon collapsed={false} mobile />
-              </button>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <header className="sticky top-0 z-30 border-b border-border bg-background/92 backdrop-blur-xl">
+              <div className="flex min-h-14 items-center gap-3 px-4 py-2 sm:px-6 lg:px-8">
+                <button
+                  type="button"
+                  onClick={() => setMobileOpen(true)}
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-muted transition hover:bg-black/[0.045] hover:text-foreground lg:hidden"
+                  aria-label="打开侧边栏"
+                >
+                  <SidebarToggleIcon collapsed={false} mobile />
+                </button>
 
-              <div className="min-w-0 flex-1">{content ?? fallback}</div>
-              <UserMenu name={userName} email={userEmail} />
-            </div>
-          </header>
+                <div className="min-w-0 flex-1">{content ?? fallback}</div>
+                <CommandPaletteTrigger />
+                <UserMenu name={userName} email={userEmail} />
+              </div>
+            </header>
 
-          <main className="min-h-0 flex-1 overflow-y-auto px-0 py-0">
-            {children}
-          </main>
+            <main className="min-h-0 flex-1 overflow-y-auto px-0 py-0">
+              {children}
+            </main>
+          </div>
+
+          <MobileSidebar
+            documents={documents}
+            open={mobileOpen}
+            onClose={() => setMobileOpen(false)}
+          />
         </div>
-
-        <MobileSidebar
-          documents={documents}
-          open={mobileOpen}
-          onClose={() => setMobileOpen(false)}
-        />
-      </div>
+      </CommandPaletteProvider>
     </HeaderSlotContext.Provider>
   );
 }

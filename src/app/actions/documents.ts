@@ -53,6 +53,57 @@ async function getDocumentParentChainParentIds(documentId: string) {
   return parentIds;
 }
 
+async function hasCreatableParentAccess(options: {
+  parentId: string | null;
+  userId: string;
+}) {
+  const { parentId, userId } = options;
+
+  if (!parentId) {
+    return true;
+  }
+
+  const parentAccess = await getDocumentAccess({
+    documentId: parentId,
+    userId,
+  });
+
+  return Boolean(
+    parentAccess?.canEdit
+      && !parentAccess.document.deletedAt
+      && !parentAccess.document.isArchived,
+  );
+}
+
+async function createDocumentRecord(options: {
+  userId: string;
+  title: string;
+  parentId: string | null;
+}) {
+  const { userId, title, parentId } = options;
+
+  return prisma.document.create({
+    data: {
+      title,
+      owner: {
+        connect: {
+          id: userId,
+        },
+      },
+      ...(parentId
+        ? {
+            parent: {
+              connect: {
+                id: parentId,
+              },
+            },
+          }
+        : {}),
+      ...lastEditedByRelation(userId),
+    },
+  });
+}
+
 export async function createDocumentAction(formData: FormData) {
   const user = await requireUser("/docs");
   const validated = createDocumentSchema.safeParse({
@@ -68,40 +119,75 @@ export async function createDocumentAction(formData: FormData) {
       ? validated.data.parentId
       : null;
 
-  if (parentId) {
-    const parentAccess = await getDocumentAccess({
-      documentId: parentId,
-      userId: user.id,
-    });
+  const hasParentAccess = await hasCreatableParentAccess({
+    parentId,
+    userId: user.id,
+  });
 
-    if (!parentAccess?.canEdit || parentAccess.document.deletedAt || parentAccess.document.isArchived) {
-      redirect("/docs");
-    }
+  if (!hasParentAccess) {
+    redirect("/docs");
   }
 
-  const document = await prisma.document.create({
-    data: {
-      title,
-      owner: {
-        connect: {
-          id: user.id,
-        },
-      },
-      ...(parentId
-        ? {
-            parent: {
-              connect: {
-                id: parentId,
-              },
-            },
-          }
-        : {}),
-      ...lastEditedByRelation(user.id),
-    },
+  const document = await createDocumentRecord({
+    userId: user.id,
+    title,
+    parentId,
   });
 
   revalidateDocumentViews(document.id);
   redirect(`/docs/${document.id}`);
+}
+
+export async function quickCreateDocumentAction(input: {
+  title?: string;
+  parentId?: string | null;
+}): Promise<FormState> {
+  const user = await requireUser("/docs");
+  const validated = createDocumentSchema.safeParse({
+    title: input.title,
+    parentId: input.parentId ?? "",
+  });
+
+  if (!validated.success) {
+    return {
+      ok: false,
+      message: "创建文档失败。",
+      errors: validated.error.flatten().fieldErrors,
+    };
+  }
+
+  const parentId = validated.data.parentId || null;
+  const hasParentAccess = await hasCreatableParentAccess({
+    parentId,
+    userId: user.id,
+  });
+
+  if (!hasParentAccess) {
+    return {
+      ok: false,
+      message: "你没有权限在该页面下创建文档。",
+    };
+  }
+
+  const document = await createDocumentRecord({
+    userId: user.id,
+    title: validated.data.title,
+    parentId,
+  });
+
+  await revalidateDocumentViews(document.id);
+  if (parentId) {
+    revalidatePath(`/docs/${parentId}`);
+  }
+
+  return {
+    ok: true,
+    message: parentId ? "子页面已创建。" : "文档已创建。",
+    data: {
+      documentId: document.id,
+      title: document.title,
+    },
+  };
 }
 
 export async function updateDocumentTitleAction(

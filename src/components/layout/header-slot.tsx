@@ -12,6 +12,7 @@ import {
   CommandPaletteTrigger,
 } from "@/components/command/command-palette-provider";
 import { SidebarDocumentsNav } from "@/components/docs/sidebar-documents-nav";
+import { NotificationInbox } from "@/components/layout/notification-inbox";
 import { UserMenu } from "@/components/layout/user-menu";
 import { type DocumentListItem } from "@/types/document";
 import { cn } from "@/lib/utils";
@@ -146,12 +147,47 @@ export function HeaderSlotProvider({
   userName,
   userEmail,
   documents,
+  notifications,
   children,
 }: {
   fallback: ReactNode;
   userName: string;
   userEmail: string;
   documents: DocumentListItem[];
+  notifications: {
+    unreadCount: number;
+    notifications: Array<{
+      id: string;
+      type:
+        | "documentInvited"
+        | "documentPermissionChanged"
+        | "documentRemoved"
+        | "commentAdded"
+        | "commentReply"
+        | "commentResolved"
+        | "commentReopened"
+        | "documentRestored"
+        | "documentTrashed"
+        | "versionRestored";
+      isRead: boolean;
+      createdAt: Date;
+      metadata: Record<string, unknown> | null;
+      actor: {
+        id: string;
+        name: string | null;
+        email: string;
+      } | null;
+      document: {
+        id: string;
+        title: string;
+      } | null;
+      comment: {
+        id: string;
+        parentId: string | null;
+        content: string;
+      } | null;
+    }>;
+  };
   children: ReactNode;
 }) {
   const [content, setContent] = useState<ReactNode | null>(null);
@@ -182,6 +218,10 @@ export function HeaderSlotProvider({
 
                 <div className="min-w-0 flex-1">{content ?? fallback}</div>
                 <CommandPaletteTrigger />
+                <NotificationInbox
+                  unreadCount={notifications.unreadCount}
+                  notifications={notifications.notifications}
+                />
                 <UserMenu name={userName} email={userEmail} />
               </div>
             </header>

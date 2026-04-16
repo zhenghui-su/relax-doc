@@ -11,6 +11,7 @@ import {
 	updateDocumentMemberRoleAction,
 } from '@/app/actions/sharing';
 import { ModalShell } from '@/components/ui/modal-shell';
+import { formatRelativeTime } from '@/lib/time';
 import { cn, nameFromEmail, roleLabel, userColorFromString } from '@/lib/utils';
 
 type ShareMode = ShareAccess | 'disabled';
@@ -57,7 +58,11 @@ type SharePanelProps = {
 			| 'memberRoleChanged'
 			| 'memberRemoved'
 			| 'shareEnabled'
-			| 'shareDisabled';
+			| 'shareDisabled'
+			| 'commentAdded'
+			| 'commentResolved'
+			| 'commentReopened'
+			| 'versionRestored';
 		createdAt: Date;
 		metadata: Record<string, unknown> | null;
 		actor: {
@@ -204,47 +209,6 @@ function getInitial(name: string | null, email: string) {
 	return Array.from((name?.trim() || email).trim())[0]?.toUpperCase() ?? '?';
 }
 
-function formatRelativeTime(value: Date) {
-	const now = Date.now();
-	const target = new Date(value).getTime();
-	const diff = now - target;
-	const minute = 60 * 1000;
-	const hour = 60 * minute;
-	const day = 24 * hour;
-
-	if (diff < minute) {
-		return '刚刚';
-	}
-
-	if (diff < hour) {
-		return `${Math.max(1, Math.floor(diff / minute))} 分钟前`;
-	}
-
-	if (diff < day) {
-		return `${Math.max(1, Math.floor(diff / hour))} 小时前`;
-	}
-
-	if (diff < 30 * day) {
-		return `${Math.max(1, Math.floor(diff / day))} 天前`;
-	}
-
-	const date = new Date(value);
-	const currentYear = new Date().getFullYear();
-
-	if (date.getFullYear() === currentYear) {
-		return new Intl.DateTimeFormat('zh-CN', {
-			month: 'numeric',
-			day: 'numeric',
-		}).format(date);
-	}
-
-	return new Intl.DateTimeFormat('zh-CN', {
-		year: 'numeric',
-		month: 'numeric',
-		day: 'numeric',
-	}).format(date);
-}
-
 function actorLabel(actor: { name: string | null; email: string } | null) {
 	if (!actor) {
 		return '未知成员';
@@ -287,6 +251,14 @@ function describeActivity(activity: SharePanelProps['activities'][number]) {
 			return `${actor} 开启了${role === 'editor' ? '可编辑' : '只读'}外链`;
 		case 'shareDisabled':
 			return `${actor} 关闭了公开分享`;
+		case 'commentAdded':
+			return `${actor} 发起了一条讨论`;
+		case 'commentResolved':
+			return `${actor} 解决了一条讨论`;
+		case 'commentReopened':
+			return `${actor} 重新打开了一条讨论`;
+		case 'versionRestored':
+			return `${actor} 恢复了一个历史版本`;
 		default:
 			return `${actor} 更新了文档`;
 	}

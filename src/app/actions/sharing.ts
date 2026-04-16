@@ -15,6 +15,7 @@ import {
 } from '@/lib/auth/validation';
 import { recordDocumentActivity } from '@/lib/document-activity';
 import { getDocumentAccess } from '@/lib/documents';
+import { createUserNotifications } from '@/lib/notifications';
 
 export async function inviteDocumentMemberAction(
 	_previousState: FormState,
@@ -30,7 +31,7 @@ export async function inviteDocumentMemberAction(
 	if (!validated.success) {
 		return {
 			ok: false,
-			message: '添加成员失败。',
+			message: '添加成员失败',
 			errors: validated.error.flatten().fieldErrors,
 		};
 	}
@@ -43,14 +44,14 @@ export async function inviteDocumentMemberAction(
 	if (!access?.canShare) {
 		return {
 			ok: false,
-			message: '只有文档所有者可以管理权限。',
+			message: '只有文档所有者可以管理权限',
 		};
 	}
 
 	if (access.document.deletedAt) {
 		return {
 			ok: false,
-			message: '回收站中的文档不能管理成员。',
+			message: '回收站中的文档不能管理成员',
 		};
 	}
 
@@ -61,14 +62,14 @@ export async function inviteDocumentMemberAction(
 	if (!invitee) {
 		return {
 			ok: false,
-			message: '该邮箱对应的用户尚未注册。',
+			message: '该邮箱对应的用户尚未注册',
 		};
 	}
 
 	if (invitee.id === access.document.ownerId) {
 		return {
 			ok: false,
-			message: '文档所有者已拥有全部权限。',
+			message: '文档所有者已拥有全部权限',
 		};
 	}
 
@@ -84,7 +85,7 @@ export async function inviteDocumentMemberAction(
 	if (existingMember?.role === validated.data.role) {
 		return {
 			ok: true,
-			message: '成员已拥有该权限。',
+			message: '成员已拥有该权限',
 		};
 	}
 
@@ -117,12 +118,23 @@ export async function inviteDocumentMemberAction(
 		},
 	});
 
+	await createUserNotifications({
+		recipientIds: [invitee.id],
+		actorId: user.id,
+		documentId: validated.data.documentId,
+		type: existingMember ? 'documentPermissionChanged' : 'documentInvited',
+		metadata: {
+			role: validated.data.role,
+			previousRole: existingMember?.role ?? null,
+		},
+	});
+
 	revalidatePath('/docs');
 	revalidatePath(`/docs/${validated.data.documentId}`);
 
 	return {
 		ok: true,
-		message: existingMember ? '成员权限已更新。' : '成员已添加。',
+		message: existingMember ? '成员权限已更新' : '成员已添加',
 	};
 }
 
@@ -140,7 +152,7 @@ export async function updateDocumentMemberRoleAction(
 	if (!validated.success) {
 		return {
 			ok: false,
-			message: '更新成员权限失败。',
+			message: '更新成员权限失败',
 			errors: validated.error.flatten().fieldErrors,
 		};
 	}
@@ -153,7 +165,7 @@ export async function updateDocumentMemberRoleAction(
 	if (!access?.canShare) {
 		return {
 			ok: false,
-			message: '只有文档所有者可以管理权限。',
+			message: '只有文档所有者可以管理权限',
 		};
 	}
 
@@ -178,14 +190,14 @@ export async function updateDocumentMemberRoleAction(
 	if (!member) {
 		return {
 			ok: false,
-			message: '成员不存在或已被移除。',
+			message: '成员不存在或已被移除',
 		};
 	}
 
 	if (member.role === validated.data.role) {
 		return {
 			ok: true,
-			message: '成员已拥有该权限。',
+			message: '成员已拥有该权限',
 		};
 	}
 
@@ -213,12 +225,23 @@ export async function updateDocumentMemberRoleAction(
 		},
 	});
 
+	await createUserNotifications({
+		recipientIds: [member.user.id],
+		actorId: user.id,
+		documentId: validated.data.documentId,
+		type: 'documentPermissionChanged',
+		metadata: {
+			role: validated.data.role,
+			previousRole: member.role,
+		},
+	});
+
 	revalidatePath('/docs');
 	revalidatePath(`/docs/${validated.data.documentId}`);
 
 	return {
 		ok: true,
-		message: '成员权限已更新。',
+		message: '成员权限已更新',
 	};
 }
 
@@ -235,7 +258,7 @@ export async function removeDocumentMemberAction(
 	if (!validated.success) {
 		return {
 			ok: false,
-			message: '移除成员失败。',
+			message: '移除成员失败',
 			errors: validated.error.flatten().fieldErrors,
 		};
 	}
@@ -248,7 +271,7 @@ export async function removeDocumentMemberAction(
 	if (!access?.canShare) {
 		return {
 			ok: false,
-			message: '只有文档所有者可以管理权限。',
+			message: '只有文档所有者可以管理权限',
 		};
 	}
 
@@ -273,7 +296,7 @@ export async function removeDocumentMemberAction(
 	if (!member) {
 		return {
 			ok: true,
-			message: '成员已被移除。',
+			message: '成员已被移除',
 		};
 	}
 
@@ -297,12 +320,22 @@ export async function removeDocumentMemberAction(
 		},
 	});
 
+	await createUserNotifications({
+		recipientIds: [member.user.id],
+		actorId: user.id,
+		documentId: validated.data.documentId,
+		type: 'documentRemoved',
+		metadata: {
+			previousRole: member.role,
+		},
+	});
+
 	revalidatePath('/docs');
 	revalidatePath(`/docs/${validated.data.documentId}`);
 
 	return {
 		ok: true,
-		message: '成员已移除。',
+		message: '成员已移除',
 	};
 }
 
@@ -319,7 +352,7 @@ export async function createShareLinkAction(
 	if (!validated.success) {
 		return {
 			ok: false,
-			message: '创建分享链接失败。',
+			message: '创建分享链接失败',
 			errors: validated.error.flatten().fieldErrors,
 		};
 	}
@@ -332,14 +365,14 @@ export async function createShareLinkAction(
 	if (!access?.canShare) {
 		return {
 			ok: false,
-			message: '只有文档所有者可以管理分享链接。',
+			message: '只有文档所有者可以管理分享链接',
 		};
 	}
 
 	if (access.document.deletedAt) {
 		return {
 			ok: false,
-			message: '回收站中的文档不能创建分享链接。',
+			message: '回收站中的文档不能创建分享链接',
 		};
 	}
 
@@ -365,7 +398,7 @@ export async function createShareLinkAction(
 
 		return {
 			ok: true,
-			message: '公开分享已关闭。',
+			message: '公开分享已关闭',
 			data: {
 				role: 'disabled',
 			},
@@ -459,7 +492,7 @@ export async function disableShareLinkStateAction(
 	if (!validated.success) {
 		return {
 			ok: false,
-			message: '关闭链接失败。',
+			message: '关闭链接失败',
 			errors: validated.error.flatten().fieldErrors,
 		};
 	}
@@ -472,14 +505,14 @@ export async function disableShareLinkStateAction(
 	if (!access?.canShare) {
 		return {
 			ok: false,
-			message: '只有文档所有者可以管理分享链接。',
+			message: '只有文档所有者可以管理分享链接',
 		};
 	}
 
 	if (access.document.deletedAt) {
 		return {
 			ok: false,
-			message: '回收站中的文档不能管理分享链接。',
+			message: '回收站中的文档不能管理分享链接',
 		};
 	}
 
@@ -501,6 +534,6 @@ export async function disableShareLinkStateAction(
 
 	return {
 		ok: true,
-		message: '访问链接已关闭。',
+		message: '访问链接已关闭',
 	};
 }

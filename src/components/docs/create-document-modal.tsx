@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 type CreateDocumentModalProps = {
   parentId?: string;
   triggerLabel?: string;
-  variant?: "primary" | "ghost";
+  variant?: "primary" | "ghost" | "menu";
 };
 
 function PlusIcon() {
@@ -40,7 +40,9 @@ export function CreateDocumentModal({
           "inline-flex h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-4",
           variant === "primary"
             ? "bg-[#151515] text-white shadow-[0_8px_20px_rgba(15,23,42,0.12)] hover:bg-black focus-visible:ring-black/10"
-            : "text-muted hover:bg-black/[0.045] hover:text-foreground focus-visible:ring-black/6",
+            : variant === "menu"
+              ? "h-9 w-full justify-start rounded-lg px-3 text-muted hover:bg-black/[0.045] hover:text-foreground focus-visible:ring-black/6"
+              : "text-muted hover:bg-black/[0.045] hover:text-foreground focus-visible:ring-black/6",
         )}
       >
         <PlusIcon />

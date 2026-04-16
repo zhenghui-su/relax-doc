@@ -29,6 +29,30 @@ enum DocumentActivityType {
   memberRemoved
   shareEnabled
   shareDisabled
+  commentAdded
+  commentResolved
+  commentReopened
+  versionRestored
+}
+
+enum DocumentVersionSource {
+  edit
+  rename
+  restore
+  system
+}
+
+enum NotificationType {
+  documentInvited
+  documentPermissionChanged
+  documentRemoved
+  commentAdded
+  commentReply
+  commentResolved
+  commentReopened
+  documentRestored
+  documentTrashed
+  versionRestored
 }
 
 model User {
@@ -45,9 +69,13 @@ model User {
   lastEditedDocuments Document[]     @relation("LastEditedDocuments")
   documentActivities DocumentActivity[] @relation("DocumentActivities")
   documentComments DocumentComment[] @relation("DocumentComments")
+  resolvedComments DocumentComment[] @relation("ResolvedComments")
+  documentVersions DocumentVersion[] @relation("DocumentVersions")
   memberships    DocumentMember[]
   favoriteDocuments DocumentFavorite[]
   createdLinks   DocumentShareLink[]
+  notifications  UserNotification[]  @relation("UserNotifications")
+  actorNotifications UserNotification[] @relation("NotificationActors")
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 }
@@ -118,6 +146,8 @@ model Document {
   shareLinks     DocumentShareLink[]
   activities     DocumentActivity[]
   comments       DocumentComment[]
+  versions       DocumentVersion[]
+  notifications  UserNotification[]
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
@@ -186,12 +216,59 @@ model DocumentComment {
   id         String   @id @default(cuid())
   documentId String
   authorId   String
+  parentId   String?
+  resolvedById String?
   content    String
+  quote      String?
+  resolvedAt DateTime?
   document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
   author     User     @relation("DocumentComments", fields: [authorId], references: [id], onDelete: Cascade)
+  parent     DocumentComment? @relation("CommentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies    DocumentComment[] @relation("CommentThread")
+  resolvedBy User?    @relation("ResolvedComments", fields: [resolvedById], references: [id], onDelete: SetNull)
+  notifications UserNotification[]
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  @@index([documentId, createdAt])
+  @@index([documentId, parentId, createdAt])
   @@index([authorId])
+  @@index([resolvedById])
+  @@index([resolvedAt])
+}
+
+model DocumentVersion {
+  id          String                @id @default(cuid())
+  documentId  String
+  createdById String?
+  title       String
+  source      DocumentVersionSource @default(edit)
+  ydocState   Bytes?
+  metadata    Json?
+  document    Document              @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdBy   User?                 @relation("DocumentVersions", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime              @default(now())
+
+  @@index([documentId, createdAt(sort: Desc)])
+  @@index([createdById])
+}
+
+model UserNotification {
+  id         String           @id @default(cuid())
+  userId     String
+  actorId    String?
+  documentId String?
+  commentId  String?
+  type       NotificationType
+  isRead     Boolean          @default(false)
+  readAt     DateTime?
+  metadata   Json?
+  user       User             @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  actor      User?            @relation("NotificationActors", fields: [actorId], references: [id], onDelete: SetNull)
+  document   Document?        @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  comment    DocumentComment? @relation(fields: [commentId], references: [id], onDelete: SetNull)
+  createdAt  DateTime         @default(now())
+
+  @@index([userId, isRead, createdAt(sort: Desc)])
+  @@index([documentId, createdAt(sort: Desc)])
+  @@index([commentId])
 }

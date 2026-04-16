@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef, useState } from "react";
 import {
   moveDocumentToTrashAction,
   permanentlyDeleteDocumentAction,
@@ -8,9 +9,11 @@ import {
   toggleFavoriteDocumentAction,
 } from "@/app/actions/documents";
 import { CommentPanel } from "@/components/docs/comment-panel";
+import { HistoryPanel } from "@/components/docs/history-panel";
 import { SharePanel } from "@/components/docs/share-panel";
 import { CreateDocumentModal } from "@/components/docs/create-document-modal";
 import { DocumentStateButton } from "@/components/docs/document-state-button";
+import { cn } from "@/lib/utils";
 
 type DocumentHeaderActionsProps = {
   documentId: string;
@@ -59,7 +62,11 @@ type DocumentHeaderActionsProps = {
       | "memberRoleChanged"
       | "memberRemoved"
       | "shareEnabled"
-      | "shareDisabled";
+      | "shareDisabled"
+      | "commentAdded"
+      | "commentResolved"
+      | "commentReopened"
+      | "versionRestored";
     createdAt: Date;
     metadata: Record<string, unknown> | null;
     actor: {
@@ -70,9 +77,17 @@ type DocumentHeaderActionsProps = {
   }>;
   currentUserId: string;
   canComment: boolean;
+  initialCommentId: string | null;
   comments: Array<{
     id: string;
     content: string;
+    quote: string | null;
+    resolvedAt: Date | null;
+    resolvedBy: {
+      id: string;
+      name: string | null;
+      email: string;
+    } | null;
     createdAt: Date;
     updatedAt: Date;
     author: {
@@ -80,6 +95,29 @@ type DocumentHeaderActionsProps = {
       name: string | null;
       email: string;
     };
+    replies: Array<{
+      id: string;
+      content: string;
+      quote: string | null;
+      createdAt: Date;
+      updatedAt: Date;
+      author: {
+        id: string;
+        name: string | null;
+        email: string;
+      };
+    }>;
+  }>;
+  versions: Array<{
+    id: string;
+    title: string;
+    source: "edit" | "rename" | "restore" | "system";
+    createdAt: Date;
+    createdBy: {
+      id: string;
+      name: string | null;
+      email: string;
+    } | null;
   }>;
 };
 
@@ -128,6 +166,123 @@ function TrashIcon() {
   );
 }
 
+function MoreIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4">
+      <path
+        d="M4.75 10a.75.75 0 1 0 0 .01V10Zm5.25 0a.75.75 0 1 0 0 .01V10Zm5.25 0a.75.75 0 1 0 0 .01V10Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function MoreActionsMenu({
+  documentId,
+  canEdit,
+  isArchived,
+  isFavorite,
+}: {
+  documentId: string;
+  canEdit: boolean;
+  isArchived: boolean;
+  isFavorite: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    }
+
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className={cn(
+          "inline-flex h-9 w-9 items-center justify-center rounded-xl text-muted transition hover:bg-black/[0.045] hover:text-foreground",
+          open && "bg-black/[0.05] text-foreground",
+        )}
+        aria-label="更多文档操作"
+        title="更多文档操作"
+      >
+        <MoreIcon />
+      </button>
+
+      {open ? (
+        <div className="absolute right-0 top-full z-40 mt-2 w-[208px] rounded-[18px] border border-black/8 bg-white p-2 shadow-[0_18px_40px_rgba(15,23,42,0.12)]">
+          <div className="space-y-1">
+            <DocumentStateButton
+              action={toggleFavoriteDocumentAction}
+              documentId={documentId}
+              label={isFavorite ? "取消收藏" : "加入收藏"}
+              active={isFavorite}
+              variant="menu"
+              icon={<StarIcon filled={isFavorite} />}
+            />
+
+            {canEdit ? (
+              <CreateDocumentModal
+                parentId={documentId}
+                triggerLabel="新建子页面"
+                variant="menu"
+              />
+            ) : null}
+
+            {canEdit ? (
+              <DocumentStateButton
+                action={toggleArchiveDocumentAction}
+                documentId={documentId}
+                label={isArchived ? "恢复文档" : "归档文档"}
+                active={isArchived}
+                variant="menu"
+                icon={<ArchiveIcon />}
+              />
+            ) : null}
+
+            {canEdit ? (
+              <DocumentStateButton
+                action={moveDocumentToTrashAction}
+                documentId={documentId}
+                label="移到回收站"
+                variant="menu"
+                icon={<TrashIcon />}
+                successHref="/docs?view=trash"
+              />
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function DocumentHeaderActions({
   documentId,
   appUrl,
@@ -144,7 +299,9 @@ export function DocumentHeaderActions({
   activities,
   currentUserId,
   canComment,
+  initialCommentId,
   comments,
+  versions,
 }: DocumentHeaderActionsProps) {
   if (isDeleted) {
     return (
@@ -172,43 +329,7 @@ export function DocumentHeaderActions({
   }
 
   return (
-    <div className="flex items-center gap-1">
-      <DocumentStateButton
-        action={toggleFavoriteDocumentAction}
-        documentId={documentId}
-        label={isFavorite ? "已收藏" : "收藏"}
-        active={isFavorite}
-        icon={<StarIcon filled={isFavorite} />}
-      />
-
-      {canEdit ? (
-        <CreateDocumentModal
-          parentId={documentId}
-          triggerLabel="子页面"
-          variant="ghost"
-        />
-      ) : null}
-
-      {canEdit ? (
-        <DocumentStateButton
-          action={toggleArchiveDocumentAction}
-          documentId={documentId}
-          label={isArchived ? "恢复" : "归档"}
-          active={isArchived}
-          icon={<ArchiveIcon />}
-        />
-      ) : null}
-
-      {canEdit ? (
-        <DocumentStateButton
-          action={moveDocumentToTrashAction}
-          documentId={documentId}
-          label="移到回收站"
-          icon={<TrashIcon />}
-          successHref="/docs?view=trash"
-        />
-      ) : null}
-
+    <div className="flex items-center gap-0.5">
       {!isDeleted ? (
         <SharePanel
           documentId={documentId}
@@ -223,13 +344,29 @@ export function DocumentHeaderActions({
       ) : null}
 
       {!isDeleted && canComment ? (
+        <HistoryPanel
+          documentId={documentId}
+          canRestore={canEdit}
+          versions={versions}
+        />
+      ) : null}
+
+      {!isDeleted && canComment ? (
         <CommentPanel
           documentId={documentId}
           currentUserId={currentUserId}
           canComment={canComment}
+          initialCommentId={initialCommentId}
           comments={comments}
         />
       ) : null}
+
+      <MoreActionsMenu
+        documentId={documentId}
+        canEdit={canEdit}
+        isArchived={isArchived}
+        isFavorite={isFavorite}
+      />
     </div>
   );
 }

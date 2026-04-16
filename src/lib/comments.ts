@@ -17,6 +17,7 @@ export async function getDocumentComments(options: {
   return prisma.documentComment.findMany({
     where: {
       documentId: options.documentId,
+      parentId: null,
     },
     include: {
       author: {
@@ -24,6 +25,27 @@ export async function getDocumentComments(options: {
           id: true,
           name: true,
           email: true,
+        },
+      },
+      resolvedBy: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      replies: {
+        include: {
+          author: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "asc",
         },
       },
     },
